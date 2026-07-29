@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "adminvps-kz",
+  "description": "adminVPS, Kazakhstan location. The offer (section 13) lists VPN among the forbidden uses specifically 'in the locations: Belarus, Kazakhstan', so the VPN hub is disallowed here until a second source clears the wording. Set hub_role=external in the profile and terminate the hub elsewhere.",
+  "vpn_hub_allowed": false,
+  "outbound_portscan_allowed": false,
+  "s3_native": false,
+  "s3_endpoint": null,
+  "s3_region": null,
+  "default_sg_open": false,
+  "blocked_ports_tcp": [17, 23, 69, 111, 135, 139, 389, 445, 636, 1080, 1183, 1337, 1433, 1521, 2049, 3128, 4444, 5223, 5432, 5985, 6379, 9200, 9300, 11211, 27017, 31337, 53413],
+  "blocked_ports_udp": [17, 69, 111, 123, 135, 137, 138, 161, 162, 389, 445, 520, 636, 1183, 1337, 1433, 1521, 1900, 2049, 4444, 5353, 11211, 31337, 53413],
+  "conditionally_blocked_ports_tcp": [22, 25, 110, 143, 465, 587, 993, 995, 2525],
+  "conditionally_blocked_ports_udp": [110, 143, 993, 995, 5060],
+  "conditional_locations": ["NL", "DE", "FI", "PL", "FR", "ES", "UK"],
+  "smtp_egress": "relay-587",
+  "notes_ref": "research/08-vps-providers.md section A5 (offer, section 13) and section A6 (KB 561)"
+}

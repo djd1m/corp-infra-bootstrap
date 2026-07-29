@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corp-infra.local/schemas/provider.schema.json",
+  "title": "corp-infra VPS provider policy",
+  "description": "bootstrap/providers/<id>.json. Provider constraints expressed as CONFIG so that no script has to change when a verdict changes (plan section 9.1). Sources are cited as relative paths into research/.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "description",
+    "vpn_hub_allowed",
+    "outbound_portscan_allowed",
+    "s3_native",
+    "s3_endpoint",
+    "s3_region",
+    "default_sg_open",
+    "blocked_ports_tcp",
+    "blocked_ports_udp",
+    "smtp_egress",
+    "notes_ref"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "enum": ["adminvps-ru", "adminvps-kz", "yandex-kz", "generic"] },
+    "description": { "type": "string", "minLength": 1 },
+    "vpn_hub_allowed": {
+      "description": "false means install-wireguard.sh refuses hub_role=self with exit 1 (plan section 9.1).",
+      "type": "boolean"
+    },
+    "outbound_portscan_allowed": {
+      "description": "Always honoured as false in code: no corp-infra script ever scans a foreign host.",
+      "type": "boolean"
+    },
+    "s3_native": { "type": "boolean" },
+    "s3_endpoint": { "type": ["string", "null"] },
+    "s3_region": { "type": ["string", "null"] },
+    "default_sg_open": {
+      "description": "true when the provider default security group exposes 22/3389 to the internet.",
+      "type": "boolean"
+    },
+    "blocked_ports_tcp": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1, "maximum": 65535 },
+      "uniqueItems": true
+    },
+    "blocked_ports_udp": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1, "maximum": 65535 },
+      "uniqueItems": true
+    },
+    "conditionally_blocked_ports_tcp": {
+      "description": "Ports the vendor describes with 'may be blocked' modality, in specific locations only.",
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1, "maximum": 65535 },
+      "uniqueItems": true
+    },
+    "conditionally_blocked_ports_udp": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1, "maximum": 65535 },
+      "uniqueItems": true
+    },
+    "conditional_locations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "smtp_egress": { "type": "string", "enum": ["direct", "relay-587", "blocked"] },
+    "notes_ref": {
+      "description": "Relative path (plus section) into research/ that justifies these values. No external URLs here.",
+      "type": "string"
+    }
+  }
+}

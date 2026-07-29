@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corp-infra.local/schemas/recon.schema.json",
+  "title": "corp-infra recon output",
+  "description": "Output contract of bootstrap/scripts/recon.sh. Strict separation: facts are measured, judgments are derived by the script. Plan 00-implementation-plan.md section 3.2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "host_id",
+    "generator",
+    "facts",
+    "judgments"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "host_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "script", "lib_version"],
+      "properties": {
+        "repo": { "type": "string", "const": "corp-infra-bootstrap" },
+        "script": { "type": "string", "const": "recon.sh" },
+        "lib_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      }
+    },
+
+    "facts": {
+      "type": "object",
+      "description": "Measured only. Must never contain the words ok / fail / recommended.",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "virt",
+        "cpu",
+        "memory",
+        "disk",
+        "disk_root",
+        "network",
+        "ports",
+        "software",
+        "limits",
+        "existing_components",
+        "provider_hint"
+      ],
+      "properties": {
+        "os": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version_id", "id_like", "pretty_name", "kernel", "arch"],
+          "properties": {
+            "id": { "type": "string" },
+            "version_id": { "type": "string" },
+            "id_like": { "type": "string" },
+            "pretty_name": { "type": "string" },
+            "kernel": { "type": "string" },
+            "arch": { "type": "string" }
+          }
+        },
+        "virt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["detected", "type"],
+          "properties": {
+            "detected": {
+              "type": ["boolean", "null"],
+              "description": "true when systemd-detect-virt exits 0 (inverted exit code pinned in lib/common.sh detect_virt); null when the tool is absent."
+            },
+            "type": { "type": "string" }
+          }
+        },
+        "cpu": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["vcpu", "model"],
+          "properties": {
+            "vcpu": { "type": "integer", "minimum": 1 },
+            "model": { "type": "string" }
+          }
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mem_total_mb", "mem_available_mb", "swap_total_mb"],
+          "properties": {
+            "mem_total_mb": { "type": "integer", "minimum": 0 },
+            "mem_available_mb": { "type": "integer", "minimum": 0 },
+            "swap_total_mb": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "disk": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mount", "fstype", "total_gb", "free_gb"],
+            "properties": {
+              "mount": { "type": "string" },
+              "fstype": { "type": "string" },
+              "total_gb": { "type": "integer", "minimum": 0 },
+              "free_gb": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "minItems": 1
+        },
+        "disk_root": {
+          "type": "object",
+          "description": "Flat duplication of the / mount point, consumed by gate G4.",
+          "additionalProperties": false,
+          "required": ["total_gb", "free_gb"],
+          "properties": {
+            "total_gb": { "type": "integer", "minimum": 0 },
+            "free_gb": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hostname", "fqdn", "default_iface", "mtu", "has_ipv6", "public_ipv4_known"],
+          "properties": {
+            "hostname": { "type": "string" },
+            "fqdn": { "type": "string" },
+            "default_iface": { "type": ["string", "null"] },
+            "mtu": { "type": ["integer", "null"], "minimum": 0 },
+            "has_ipv6": { "type": "boolean" },
+            "public_ipv4_known": {
+              "type": "boolean",
+              "description": "Whether a public IPv4 is known from local sources. The address itself is never resolved by an outbound request."
+            }
+          }
+        },
+        "ports": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["listening"],
+          "properties": {
+            "listening": {
+              "description": "Local listeners only (ss -Hln). Outbound scanning is forbidden - adminVPS offer section 13, research/08-vps-providers.md section A5. null when nothing could read the socket table.",
+              "type": ["array", "null"],
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["proto", "addr", "port"],
+                "properties": {
+                  "proto": { "type": "string", "enum": ["tcp", "udp"] },
+                  "addr": { "type": "string" },
+                  "port": { "type": "integer", "minimum": 0, "maximum": 65535 }
+                }
+              }
+            }
+          }
+        },
+        "software": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "docker", "compose", "systemd", "wireguard", "restic",
+            "sops", "age", "python3", "bash", "shellcheck"
+          ],
+          "properties": {
+            "docker": { "$ref": "#/$defs/softwareEntry" },
+            "compose": { "$ref": "#/$defs/softwareEntry" },
+            "systemd": { "$ref": "#/$defs/softwareEntry" },
+            "wireguard": { "$ref": "#/$defs/softwareEntry" },
+            "restic": { "$ref": "#/$defs/softwareEntry" },
+            "sops": { "$ref": "#/$defs/softwareEntry" },
+            "age": { "$ref": "#/$defs/softwareEntry" },
+            "python3": { "$ref": "#/$defs/softwareEntry" },
+            "bash": { "$ref": "#/$defs/softwareEntry" },
+            "shellcheck": { "$ref": "#/$defs/softwareEntry" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cgroup_version", "swap_enabled", "nofile_soft", "selinux", "apparmor"],
+          "properties": {
+            "cgroup_version": { "type": ["integer", "null"], "enum": [1, 2, null] },
+            "swap_enabled": { "type": ["boolean", "null"] },
+            "nofile_soft": { "type": ["integer", "null"], "minimum": 0 },
+            "selinux": { "type": ["string", "null"] },
+            "apparmor": { "type": ["string", "null"] }
+          }
+        },
+        "existing_components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "present", "detected_by", "version"],
+            "properties": {
+              "id": { "type": "string" },
+              "present": { "type": "boolean" },
+              "detected_by": { "type": "string" },
+              "version": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "provider_hint": {
+          "description": "Heuristic over DMI / cloud-init / hostname. Never a request to a metadata service.",
+          "type": ["string", "null"],
+          "enum": ["adminvps-ru", "adminvps-kz", "yandex-kz", "generic", null]
+        }
+      }
+    },
+
+    "judgments": {
+      "type": "object",
+      "description": "Derived by recon.sh. No consumer recomputes any of this.",
+      "additionalProperties": false,
+      "required": [
+        "os_tier",
+        "profile_requested",
+        "profile_recommended",
+        "sizing_verdict",
+        "gates",
+        "provider_policy",
+        "blockers",
+        "warnings",
+        "exit_code"
+      ],
+      "properties": {
+        "os_tier": { "type": "string", "enum": ["supported", "best-effort", "unsupported"] },
+        "profile_requested": { "type": ["string", "null"] },
+        "profile_recommended": { "type": "string" },
+        "sizing_verdict": { "type": "string", "enum": ["pass", "fail", "inconclusive"] },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["g1", "g2", "g4"],
+          "properties": {
+            "g1": { "$ref": "#/$defs/gate" },
+            "g2": { "$ref": "#/$defs/gate" },
+            "g4": { "$ref": "#/$defs/gate" }
+          }
+        },
+        "provider_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "vpn_hub_allowed", "outbound_portscan_allowed", "s3_native", "source"],
+          "properties": {
+            "id": { "type": "string" },
+            "vpn_hub_allowed": { "type": "boolean" },
+            "outbound_portscan_allowed": { "type": "boolean" },
+            "s3_native": { "type": "boolean" },
+            "source": { "type": "string", "enum": ["flag", "heuristic", "state", "default"] }
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "description": "Empty means installation may proceed.",
+          "items": { "type": "string" }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "exit_code": { "type": "integer", "enum": [0, 1, 2] }
+      }
+    }
+  },
+
+  "$defs": {
+    "softwareEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["present", "version"],
+      "properties": {
+        "present": { "type": "boolean" },
+        "version": { "type": ["string", "null"] }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "required", "actual", "ratio", "verdict"],
+      "properties": {
+        "name": { "type": "string" },
+        "required": { "type": "number" },
+        "actual": { "type": "number" },
+        "ratio": { "type": "number" },
+        "verdict": { "type": "string", "enum": ["pass", "fail", "inconclusive"] }
+      }
+    }
+  }
+}

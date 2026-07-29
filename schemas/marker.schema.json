@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corp-infra.local/schemas/marker.schema.json",
+  "title": "corp-infra stage marker",
+  "description": "/var/lib/corp-infra/markers/<stage>.json. A marker is a CLAIM, not a proof: every consumer must additionally run the producer's live --check (INV-GLOBAL-2). Plan section 3.3, 04_domain_model section 3.1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "stage",
+    "status",
+    "repo",
+    "repo_version",
+    "lib_version",
+    "applied_at",
+    "host_id"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "stage": {
+      "description": "Closed set of stage names.",
+      "type": "string",
+      "enum": [
+        "security.hardened",
+        "secrets.escrow.ok",
+        "vpn.ready",
+        "proxy.ready",
+        "backup.ready",
+        "ent-infra.gitlab.installed",
+        "ent-infra.tracker.installed",
+        "ent-infra.wiki.installed",
+        "ent-infra.site.installed",
+        "ent-infra.observability.installed",
+        "agents.ready"
+      ]
+    },
+    "status": { "type": "string", "enum": ["ok", "failed", "pending"] },
+    "repo": {
+      "type": "string",
+      "enum": [
+        "corp-infra-bootstrap",
+        "corp-infra-security",
+        "corp-infra-vpn-proxy",
+        "corp-infra-backup",
+        "corp-infra-ent-infra",
+        "corp-infra-pop-agents"
+      ]
+    },
+    "repo_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "lib_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "applied_at": { "type": "string", "format": "date-time" },
+    "host_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "evidence": {
+      "description": "Free-form scalar evidence produced by the stage. May be an empty object.",
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+    }
+  }
+}

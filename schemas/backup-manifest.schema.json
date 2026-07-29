@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corp-infra.local/schemas/backup-manifest.schema.json",
+  "title": "corp-infra backup manifest",
+  "description": "/var/lib/corp-infra/manifests/<svc>.backup-manifest.json. The only way for a service to enter the backup set; the backup context knows nothing about service internals. 04_domain_model section 3.2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "service",
+    "aggregate_version",
+    "restore_priority",
+    "rpo_hours",
+    "rto_hours",
+    "consistency",
+    "quiesce",
+    "include",
+    "exclude",
+    "version_pin_required_for_restore",
+    "restore_runbook",
+    "verify"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "service": {
+      "type": "string",
+      "enum": ["gitlab", "tracker", "wiki", "site", "observability", "security", "vpn-proxy", "backup", "bootstrap", "pop-agents", "platform"]
+    },
+    "aggregate_version": { "type": "string", "minLength": 1 },
+    "restore_priority": {
+      "description": "P0..P5 from the DR data inventory (04_domain_model section 4).",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "rpo_hours": { "type": "number", "minimum": 0 },
+    "rto_hours": { "type": "number", "minimum": 0 },
+    "consistency": {
+      "type": "string",
+      "enum": ["native-dump", "pg-dump", "mysql-dump", "file-immutable", "regenerable"]
+    },
+    "quiesce": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pre", "post"],
+      "properties": {
+        "pre": { "type": "array", "items": { "type": "string" } },
+        "post": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "include": {
+      "description": "Absolute paths. C3 / INV-BK-5: must never contain /root/.config/sops or keys.txt.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^/",
+        "not": { "pattern": "(/root/\\.config/sops|keys\\.txt)" }
+      },
+      "minItems": 1
+    },
+    "exclude": { "type": "array", "items": { "type": "string", "pattern": "^/" } },
+    "version_pin_required_for_restore": { "type": "boolean" },
+    "restore_runbook": { "type": "string", "minLength": 1 },
+    "verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_count_min", "max_age_hours"],
+      "properties": {
+        "artifact_count_min": { "type": "integer", "minimum": 0 },
+        "max_age_hours": { "type": "number", "minimum": 0 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "INV-BK-7: a dump-based consistency class requires a non-empty quiesce.pre. This is the machine form of 'no database is ever backed up by copying files while it runs'.",
+      "if": {
+        "properties": {
+          "consistency": { "enum": ["pg-dump", "mysql-dump", "native-dump"] }
+        },
+        "required": ["consistency"]
+      },
+      "then": {
+        "properties": {
+          "quiesce": {
+            "properties": {
+              "pre": { "minItems": 1 }
+            },
+            "required": ["pre"]
+          }
+        },
+        "required": ["quiesce"]
+      }
+    }
+  ]
+}

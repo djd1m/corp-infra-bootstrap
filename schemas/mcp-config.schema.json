@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corp-infra.local/schemas/mcp-config.schema.json",
+  "title": "corp-infra opsagent MCP configuration",
+  "description": "pop-agents/agent/mcp/mcp-config.sample.json. ADR-013 section 3: MCP connections are optional and read-only by default; every token comes from sops at runtime, never from a literal in this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mcpServers"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "mcpServers": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/server" }
+    }
+  },
+  "$defs": {
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "args", "access"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "env": {
+          "description": "Values must be ${VAR} placeholders resolved from a sops-decrypted 0600 env file. A literal secret here is a contract violation (INV-POP-5).",
+          "type": "object",
+          "additionalProperties": { "type": "string", "pattern": "^\\$\\{[A-Z0-9_]+\\}$" }
+        },
+        "env_file": {
+          "type": "string",
+          "pattern": "^/etc/corp-infra/[a-z0-9-]+/\\.env$"
+        },
+        "access": {
+          "type": "string",
+          "enum": ["read-only", "read-write"],
+          "description": "read-write requires an explicit human decision recorded in pop-agents/for-humans."
+        },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}

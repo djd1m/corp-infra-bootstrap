@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "generic",
+  "description": "Fallback used when provider_hint cannot be determined. Maximally permissive on policy, but s3_native is false: an offsite target must always be configured explicitly, never assumed.",
+  "vpn_hub_allowed": true,
+  "outbound_portscan_allowed": true,
+  "s3_native": false,
+  "s3_endpoint": null,
+  "s3_region": null,
+  "default_sg_open": false,
+  "blocked_ports_tcp": [],
+  "blocked_ports_udp": [],
+  "conditionally_blocked_ports_tcp": [],
+  "conditionally_blocked_ports_udp": [],
+  "conditional_locations": [],
+  "smtp_egress": "direct",
+  "notes_ref": "research/08-vps-providers.md section C (no vendor-specific constraints assumed)"
+}

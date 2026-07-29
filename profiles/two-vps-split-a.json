@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "name": "two-vps-split-a",
+  "default": false,
+  "description": "Node A of the two-VPS split: GitLab plus CI only. WireGuard peer 10.8.0.2, own caddy-internal, observability agents only.",
+  "node_role": "git",
+  "min_vcpu": 8,
+  "min_ram_mb": 16384,
+  "min_disk_gb": 350,
+  "gates": { "g1_steady_ratio": 0.75, "g2_cap_ratio": 1.10, "g4_disk_ratio": 1.15, "g5_headroom_mb": 512 },
+  "contention_policy": "slices-v1",
+  "services": [
+    {"id": "gitlab", "variant": "default-capped", "steady_mb": 10240, "cap_mb": 11776, "disk_gb": 200, "adr": "ADR-002", "opts": {"registry": false, "runner_concurrent": 1, "runner_job_cap_mb": 1536, "bundled_prometheus": false, "bundled_kas": false}},
+    {"id": "observability", "variant": "agents-only", "steady_mb": 256, "cap_mb": 410, "disk_gb": 2, "adr": "ADR-011", "opts": {"scrape_target_only": true}}
+  ],
+  "platform": [
+    {"id": "os-docker", "steady_mb": 614, "cap_mb": 1024, "disk_gb": 25},
+    {"id": "wireguard", "steady_mb": 31, "cap_mb": 51, "disk_gb": 0, "adr": "ADR-005", "opts": {"role": "peer", "address": "10.8.0.2"}},
+    {"id": "caddy", "steady_mb": 51, "cap_mb": 82, "disk_gb": 2, "adr": "ADR-006", "opts": {"instances": ["internal"]}},
+    {"id": "runner", "steady_mb": 256, "cap_mb": 307, "disk_gb": 20, "adr": "ADR-002"},
+    {"id": "ci-slot", "steady_mb": 0, "cap_mb": 1536, "disk_gb": 0, "adr": "ADR-002", "opts": {"concurrent": 1, "memory": "1500m"}},
+    {"id": "backup", "steady_mb": 0, "cap_mb": 819, "disk_gb": 50, "adr": "ADR-008"},
+    {"id": "opsagent", "steady_mb": 0, "cap_mb": 614, "disk_gb": 2, "adr": "ADR-013"}
+  ],
+  "slices": {
+    "corp-core": { "MemoryLow": "10547M", "MemoryHigh": "infinity", "MemoryMax": "12268M" },
+    "corp-ci": { "MemoryLow": "0", "MemoryHigh": "1.2G", "MemoryMax": "1.5G" },
+    "corp-backup": { "MemoryLow": "0", "MemoryHigh": "600M", "MemoryMax": "800M" },
+    "corp-agent": { "MemoryLow": "0", "MemoryHigh": "400M", "MemoryMax": "600M" }
+  },
+  "offsite": {
+    "primary": "b2",
+    "alternatives": ["yandex-kz", "hetzner"],
+    "residency": "none",
+    "storage_class": "hot",
+    "retain_logs_offsite": false
+  },
+  "vpn": { "hub_role": "external", "provider_policy": "generic" }
+}

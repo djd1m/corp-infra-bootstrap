@@ -1,0 +1,44 @@
+# gitleaks configuration for corp-infra (gate G-08: gitleaks detect --no-git).
+#
+# The repo set is designed so that no plaintext secret ever reaches git:
+# everything sensitive lives in sops-encrypted *.enc.env / *.enc.yaml, and the
+# runtime files under /etc/corp-infra/<svc>/.env are generated on the host.
+# This config keeps the default rule set and only narrows the obvious
+# false-positive sources.
+
+title = "corp-infra"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation placeholders and sops-encrypted material"
+
+paths = [
+  '''\.enc\.(env|yaml|yml|json)$''',
+  '''\.env\.example$''',
+  '''(^|/)for-ai-dumb/''',
+  '''(^|/)for-ai-smart/''',
+  '''(^|/)for-humans/''',
+]
+
+regexes = [
+  # Public age recipients are public by construction (escrow.schema.json).
+  '''age1[0-9a-z]{20,}''',
+  # Documentation placeholders.
+  '''<(org|fingerprint|token|password|domain|recipient)>''',
+  '''example\.com''',
+  '''CHANGE_?ME''',
+]
+
+[[rules]]
+id = "corp-infra-age-private-key"
+description = "age private key must never appear in the repository"
+regex = '''AGE-SECRET-KEY-1[0-9A-Z]{20,}'''
+tags = ["key", "age", "critical"]
+
+[[rules]]
+id = "corp-infra-wireguard-private-key"
+description = "WireGuard private key outside sops"
+regex = '''(?i)privatekey\s*=\s*[A-Za-z0-9+/]{42,}='''
+tags = ["key", "wireguard", "critical"]

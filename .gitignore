@@ -1,0 +1,37 @@
+# Secrets - never committed in cleartext (ADR-007 section 5).
+# Only *.enc.env / *.enc.yaml (sops-encrypted) and *.env.example belong in git.
+*.env
+!*.enc.env
+!*.env.example
+!versions.env
+*.key
+*.pem
+keys.txt
+age-key*
+*.agekey
+
+# Belt-and-braces for the secrets/ directory: nothing under it is tracked
+# except the encrypted examples and its README (MINOR-5, INV-SEC-2). A stray
+# secrets/creds.txt or secrets/prod.pem.bak must never be committed silently.
+secrets/*
+!secrets/*.example
+!secrets/README.md
+
+# Runtime state produced on a host, not source
+/var/
+recon-*.json
+latest.json
+*.log
+
+# Editor and OS noise
+*.swp
+*~
+.DS_Store
+.idea/
+.vscode/
+
+# Local scratch
+/tmp/
+*.tmp
+*.bak
+*.bak.*

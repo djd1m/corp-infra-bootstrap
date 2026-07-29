@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "yandex-kz",
+  "description": "Yandex Cloud, Kazakhstan region. Native S3-compatible object storage (region string must literally be kz1). The default security group opens 22 and 3389 - never leave it at the default; create an explicit SG.",
+  "vpn_hub_allowed": true,
+  "outbound_portscan_allowed": true,
+  "s3_native": true,
+  "s3_endpoint": "https://storage.yandexcloud.kz",
+  "s3_region": "kz1",
+  "default_sg_open": true,
+  "blocked_ports_tcp": [25],
+  "blocked_ports_udp": [],
+  "conditionally_blocked_ports_tcp": [],
+  "conditionally_blocked_ports_udp": [],
+  "conditional_locations": [],
+  "smtp_egress": "relay-587",
+  "notes_ref": "research/08-vps-providers.md section B (security groups, port 25 egress block, S3 endpoint and kz1 region)"
+}

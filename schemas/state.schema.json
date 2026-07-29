@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corp-infra.local/schemas/state.schema.json",
+  "title": "corp-infra orchestration state",
+  "description": "/var/lib/corp-infra/state.json, 0640 root:root. Single writer: corp-infra-bootstrap. Plan section 3.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "host_id",
+    "profile",
+    "profile_forced",
+    "node_role",
+    "current_stage",
+    "stages",
+    "repos",
+    "lib_version"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "host_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "profile": { "type": "string" },
+    "profile_forced": {
+      "description": "true only when --force-profile was used against sizing_verdict=inconclusive (INV-BS-2).",
+      "type": "boolean"
+    },
+    "node_role": { "type": "string", "enum": ["single", "git", "apps"] },
+    "current_stage": {
+      "type": "string",
+      "enum": ["none", "security", "vpn-proxy", "backup", "ent-infra", "pop-agents", "done"]
+    },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security", "vpn-proxy", "backup", "ent-infra", "pop-agents"],
+      "properties": {
+        "security": { "$ref": "#/$defs/stageStatus" },
+        "vpn-proxy": { "$ref": "#/$defs/stageStatus" },
+        "backup": { "$ref": "#/$defs/stageStatus" },
+        "ent-infra": { "$ref": "#/$defs/stageStatus" },
+        "pop-agents": { "$ref": "#/$defs/stageStatus" }
+      }
+    },
+    "repos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "corp-infra-bootstrap",
+        "corp-infra-security",
+        "corp-infra-vpn-proxy",
+        "corp-infra-backup",
+        "corp-infra-ent-infra",
+        "corp-infra-pop-agents"
+      ],
+      "properties": {
+        "corp-infra-bootstrap": { "$ref": "#/$defs/semver" },
+        "corp-infra-security": { "$ref": "#/$defs/semver" },
+        "corp-infra-vpn-proxy": { "$ref": "#/$defs/semver" },
+        "corp-infra-backup": { "$ref": "#/$defs/semver" },
+        "corp-infra-ent-infra": { "$ref": "#/$defs/semver" },
+        "corp-infra-pop-agents": { "$ref": "#/$defs/semver" }
+      }
+    },
+    "lib_version": { "$ref": "#/$defs/semver" },
+    "images": {
+      "description": "Image digest history for disaster recovery (Risk D3): service id -> '<tag>@sha256:<hex>'.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "last_recon_at": { "type": ["string", "null"], "format": "date-time" },
+    "last_check_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "$defs": {
+    "stageStatus": { "type": "string", "enum": ["ok", "failed", "pending"] },
+    "semver": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+  }
+}

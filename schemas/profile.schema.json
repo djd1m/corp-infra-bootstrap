@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corp-infra.local/schemas/profile.schema.json",
+  "title": "corp-infra deployment profile",
+  "description": "bootstrap/profiles/<name>.json. Direct consequence of gates G1-G5 in 05_architecture section 2.1. Plan section 3.4.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "default",
+    "description",
+    "node_role",
+    "min_vcpu",
+    "min_ram_mb",
+    "min_disk_gb",
+    "gates",
+    "contention_policy",
+    "services",
+    "platform",
+    "offsite",
+    "vpn"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "name": {
+      "description": "Must equal the file name without .json (checked by sizing-check.sh --static --all).",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "default": {
+      "description": "Exactly one profile in the directory may set this to true (gate G-07).",
+      "type": "boolean"
+    },
+    "description": { "type": "string", "minLength": 1 },
+    "node_role": { "type": "string", "enum": ["single", "git", "apps"] },
+    "min_vcpu": { "type": "integer", "minimum": 1 },
+    "min_ram_mb": { "type": "integer", "minimum": 1024 },
+    "min_disk_gb": { "type": "integer", "minimum": 1 },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["g1_steady_ratio", "g2_cap_ratio", "g4_disk_ratio", "g5_headroom_mb"],
+      "properties": {
+        "g1_steady_ratio": { "type": "number", "const": 0.75 },
+        "g2_cap_ratio": { "type": "number", "const": 1.10 },
+        "g4_disk_ratio": { "type": "number", "const": 1.15 },
+        "g5_headroom_mb": { "type": "integer", "const": 512 }
+      }
+    },
+    "contention_policy": {
+      "description": "Mandatory ('slices-v1') when the sum of cap_mb exceeds min_ram_mb (gate G3). null otherwise.",
+      "type": ["string", "null"],
+      "enum": ["slices-v1", null]
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "variant", "steady_mb", "cap_mb", "disk_gb", "adr"],
+        "properties": {
+          "id": { "type": "string", "enum": ["gitlab", "tracker", "wiki", "site", "observability"] },
+          "variant": { "type": "string", "minLength": 1 },
+          "steady_mb": { "type": "integer", "minimum": 0 },
+          "cap_mb": { "type": "integer", "minimum": 0 },
+          "disk_gb": { "type": "integer", "minimum": 0 },
+          "adr": { "type": "string", "pattern": "^ADR-[0-9]{3}$" },
+          "opts": { "type": "object" }
+        }
+      }
+    },
+    "platform": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "steady_mb", "cap_mb", "disk_gb"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["os-docker", "wireguard", "caddy", "backup", "opsagent", "runner", "ci-slot"]
+          },
+          "steady_mb": { "type": "integer", "minimum": 0 },
+          "cap_mb": { "type": "integer", "minimum": 0 },
+          "disk_gb": { "type": "integer", "minimum": 0 },
+          "adr": { "type": "string", "pattern": "^ADR-[0-9]{3}$" },
+          "opts": { "type": "object" }
+        }
+      }
+    },
+    "slices": {
+      "description": "systemd slice budgets; required when contention_policy is set (05_architecture section 2.6).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["corp-core", "corp-ci", "corp-backup", "corp-agent"],
+      "properties": {
+        "corp-core": { "$ref": "#/$defs/slice" },
+        "corp-ci": { "$ref": "#/$defs/slice" },
+        "corp-backup": { "$ref": "#/$defs/slice" },
+        "corp-agent": { "$ref": "#/$defs/slice" }
+      }
+    },
+    "offsite": {
+      "description": "Config, not code (plan section 9.2). Changing the offsite target changes only these values.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "alternatives", "residency", "storage_class", "retain_logs_offsite"],
+      "properties": {
+        "primary": { "type": "string", "enum": ["b2", "yandex-kz", "hetzner"] },
+        "alternatives": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["b2", "yandex-kz", "hetzner"] }
+        },
+        "residency": { "type": "string", "enum": ["none", "RK", "RU", "EU"] },
+        "storage_class": { "type": "string", "enum": ["hot", "COLD", "ICE"] },
+        "retain_logs_offsite": { "type": "boolean" }
+      }
+    },
+    "vpn": {
+      "description": "Config, not code (plan section 9.1). hub_role=external means the WireGuard hub lives on another node or provider.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hub_role", "provider_policy"],
+      "properties": {
+        "hub_role": { "type": "string", "enum": ["self", "external"] },
+        "provider_policy": {
+          "type": "string",
+          "enum": ["adminvps-ru", "adminvps-kz", "yandex-kz", "generic"]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "contention_policy": { "type": "string" } }, "required": ["contention_policy"] },
+      "then": { "required": ["slices"] }
+    }
+  ],
+  "$defs": {
+    "slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["MemoryLow", "MemoryHigh", "MemoryMax"],
+      "properties": {
+        "MemoryLow": { "type": "string" },
+        "MemoryHigh": { "type": "string" },
+        "MemoryMax": { "type": "string" }
+      }
+    }
+  }
+}

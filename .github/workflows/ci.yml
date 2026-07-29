@@ -1,0 +1,357 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    name: G-02 / G-03 shell syntax and shellcheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: G-02 bash -n on every script
+        run: |
+          set -Eeuo pipefail
+          find . -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          echo "G-02 OK"
+
+      - name: main "$@" must be the last line of every script
+        run: |
+          set -Eeuo pipefail
+          rc=0
+          for f in scripts/*.sh; do
+            if [ "$(tail -1 "$f")" != 'main "$@"' ]; then
+              echo "MISSING main last line: $f"
+              rc=1
+            fi
+          done
+          exit "$rc"
+
+      - name: G-03 shellcheck, zero findings at warning or above
+        run: |
+          set -Eeuo pipefail
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable \
+            -S warning lib/common.sh scripts/*.sh
+          echo "G-03 OK"
+
+  layout:
+    name: G-01 / G-14 layout and secret hygiene
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: G-01 required artefacts are present
+        run: |
+          set -Eeuo pipefail
+          rc=0
+          for f in README.md AGENTS.md CLAUDE.md LICENSE .gitignore \
+                   for-humans for-ai-smart for-ai-dumb scripts lib \
+                   profiles providers schemas versions.env; do
+            if [ ! -e "$f" ]; then
+              echo "MISSING $f"
+              rc=1
+            fi
+          done
+          grep -q '@AGENTS.md' CLAUDE.md || { echo "CLAUDE.md does not import AGENTS.md"; rc=1; }
+          exit "$rc"
+
+      - name: G-14 no plaintext env files are tracked
+        run: |
+          set -Eeuo pipefail
+          found="$(git ls-files | grep -E '\.env$' | grep -vE '(\.enc\.env|\.env\.example|^versions\.env$)' || true)"
+          if [ -n "$found" ]; then
+            echo "tracked plaintext env files:"
+            echo "$found"
+            exit 1
+          fi
+          grep -q '^\*\.env$' .gitignore || { echo ".gitignore does not cover *.env"; exit 1; }
+          echo "G-14 OK"
+
+      - name: G-08 gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  json:
+    name: G-06 / G-07 / G-12 JSON contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install validator
+        run: pip install --quiet jsonschema
+
+      - name: Every JSON artefact parses
+        run: |
+          set -Eeuo pipefail
+          for f in profiles/*.json providers/*.json schemas/*.json; do
+            python3 -m json.tool "$f" > /dev/null || { echo "INVALID: $f"; exit 1; }
+          done
+          echo "JSON parse OK"
+
+      - name: G-12 profiles and providers validate against their schema
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import glob
+          import json
+          import sys
+
+          import jsonschema
+
+          pairs = [("profiles/*.json", "schemas/profile.schema.json"),
+                   ("providers/*.json", "schemas/provider.schema.json")]
+          failed = 0
+          for pattern, schema_path in pairs:
+              with open(schema_path, encoding="utf-8") as fh:
+                  schema = json.load(fh)
+              for path in sorted(glob.glob(pattern)):
+                  if path.endswith("README.md"):
+                      continue
+                  with open(path, encoding="utf-8") as fh:
+                      doc = json.load(fh)
+                  try:
+                      jsonschema.validate(doc, schema)
+                      print("ok  ", path)
+                  except jsonschema.ValidationError as exc:
+                      print("FAIL", path, exc.message)
+                      failed = 1
+          sys.exit(failed)
+          PY
+
+      - name: G-06 recon output validates against recon.schema.json
+        run: |
+          set -Eeuo pipefail
+          ./scripts/recon.sh --json > /tmp/recon.json || true
+          python3 -c "import json,jsonschema; jsonschema.validate(json.load(open('/tmp/recon.json')), json.load(open('schemas/recon.schema.json')))"
+          echo "G-06 OK"
+
+      - name: G-07 static sizing over every profile
+        run: |
+          set -Eeuo pipefail
+          ./scripts/sizing-check.sh --static --all
+          echo "G-07 OK"
+
+  yaml:
+    name: G-04 yamllint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet yamllint
+      - run: yamllint -c .yamllint.yml .
+
+  docs:
+    name: G-13 documentation gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: for-ai-dumb has an expected output block and a STOP per file
+        run: |
+          set -Eeuo pipefail
+          rc=0
+          for f in for-ai-dumb/*.md; do
+            grep -qi 'expected output' "$f" || { echo "no Expected output block: $f"; rc=1; }
+            grep -q 'STOP' "$f" || { echo "no STOP gate: $f"; rc=1; }
+            grep -qi 'do not guess\|ask, do not guess' "$f" || { echo "no ask-dont-guess clause: $f"; rc=1; }
+          done
+          exit "$rc"
+
+      - name: for-ai-smart has no numbered command chain longer than 3 steps
+        run: |
+          set -Eeuo pipefail
+          rc=0
+          for f in for-ai-smart/*.md; do
+            if grep -qE '^\s*4\.\s' "$f"; then
+              echo "numbered chain longer than 3 steps: $f"
+              rc=1
+            fi
+          done
+          exit "$rc"
+
+      - name: no dead file references in markdown
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path(".").resolve()
+          dead = []
+          for md in sorted(pathlib.Path(".").rglob("*.md")):
+              text = md.read_text(encoding="utf-8")
+              refs = set(re.findall(r"\]\(([^)#]+?)\)", text))
+              refs |= set(re.findall(r"`([^`\s]+\.(?:md|sh|json|yml|yaml|env|toml))`", text))
+              for ref in refs:
+                  if ref.startswith(("http://", "https://", "mailto:", "/")):
+                      continue
+                  if any(ch in ref for ch in "*<>"):
+                      continue
+                  if "/" not in ref:
+                      continue
+                  if (md.parent / ref).resolve().exists():
+                      continue
+                  if (root / ref).resolve().exists():
+                      continue
+                  dead.append(f"{md} -> {ref}")
+          for item in dead:
+              print("DEAD:", item)
+          sys.exit(1 if dead else 0)
+          PY
+
+  lib:
+    name: G-09 / G-11 library contract (authoritative byte-identity)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # bootstrap owns the canonical lib/common.sh and is THE authoritative
+      # byte-identity gate (ADR-012, MAJOR-5). Every sibling is checked out and
+      # compared here on every PR. These checkouts deliberately do NOT set
+      # continue-on-error: if a sibling cannot be fetched, the gate FAILS rather
+      # than skipping, so drift can never merge green through an unavailable
+      # canonical/sibling.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/corp-infra-security
+          path: .siblings/security
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/corp-infra-vpn-proxy
+          path: .siblings/vpn-proxy
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/corp-infra-backup
+          path: .siblings/backup
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/corp-infra-ent-infra
+          path: .siblings/ent-infra
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/corp-infra-pop-agents
+          path: .siblings/pop-agents
+
+      - name: Every public function in the contract exists
+        run: |
+          set -Eeuo pipefail
+          bash -c '
+            source lib/common.sh
+            missing=""
+            for f in log_init log warn die on_err trap_init parse_args confirm \
+                     require_root require_cmd require_stage retry \
+                     json_escape json_kv json_arr json_read \
+                     detect_os detect_virt detect_pkg_mgr cpu_count \
+                     ram_total_mb ram_avail_mb disk_total_gb disk_free_gb \
+                     port_free svc_active container_healthy \
+                     state_get state_set state_mark state_check \
+                     profile_load profile_field profile_service_field headroom_check; do
+              declare -F "$f" >/dev/null || missing="$missing $f"
+            done
+            if [ -n "$missing" ]; then echo "MISSING:$missing"; exit 1; fi
+            echo "all public functions present"
+          '
+
+      - name: G-11 json_kv survives the adversarial corpus
+        run: |
+          set -Eeuo pipefail
+          bash -c '
+            source lib/common.sh
+            CI_REPO=corp-infra-bootstrap; CI_SCRIPT=ci
+            corpus=("plain" "with \"quotes\"" "back\\slash" "tab	here"
+                    "dollar \$HOME and \`backtick\`" "" "unicode и emoji 🚀"
+                    "brace { } bracket [ ]" "slash / and \\\\ double")
+            corpus+=("$(printf "line1\nline2")")
+            corpus+=("$(printf "ctrl\001\002")")
+            i=0
+            {
+              printf "{\n"
+              for v in "${corpus[@]}"; do
+                printf "  %s,\n" "$(json_kv "k$i" "$v")"
+                i=$((i+1))
+              done
+              printf "  %s\n" "$(json_arr tail string "a\"b" "c\\d")"
+              printf "}\n"
+            } > /tmp/corpus.json
+          '
+          python3 -m json.tool /tmp/corpus.json > /dev/null
+          echo "G-11 OK"
+
+      - name: G-09 canonical lib is byte-identical in all five siblings (authoritative)
+        run: |
+          set -Eeuo pipefail
+          canon=lib/common.sh
+          canonver=lib/VERSION
+          test -s "$canon"    || { echo "FAIL: canonical lib/common.sh is missing"; exit 1; }
+          test -s "$canonver" || { echo "FAIL: canonical lib/VERSION is missing"; exit 1; }
+          rc=0
+          for name in security vpn-proxy backup ent-infra pop-agents; do
+            sib=".siblings/$name/lib/common.sh"
+            sibver=".siblings/$name/lib/VERSION"
+            # The checkout step already fails the job when a sibling is
+            # unavailable; this is the defensive belt on top of that brace.
+            if [ ! -r "$sib" ] || [ ! -r "$sibver" ]; then
+              echo "FAIL: $name has no vendored lib to compare (canonical unavailable => fail, not skip)"
+              rc=1; continue
+            fi
+            if ! cmp -s "$canonver" "$sibver"; then
+              echo "VERSION-DRIFT: $name pins $(cat "$sibver"), canonical is $(cat "$canonver")"
+              rc=1; continue
+            fi
+            if ! cmp -s "$canon" "$sib"; then
+              echo "CONTENT-DRIFT: $name has an edited vendored lib at the same VERSION (INV-BS-3)"
+              diff -u "$canon" "$sib" | head -40 || true
+              rc=1; continue
+            fi
+            echo "ok   $name: byte-identical (lib $(cat "$sibver"))"
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "G-09 FAIL: this is the single authoritative byte-identity gate; drift must not merge"
+            exit 1
+          fi
+          echo "G-09 OK: canonical lib is byte-identical in every sibling"
+
+  checks:
+    name: Script self-checks are non-mutating
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: --check creates nothing, not even a directory
+        run: |
+          set -Eeuo pipefail
+          CI_STATE=/tmp/probe-state CI_LOGDIR=/tmp/probe-log \
+            ./scripts/recon.sh --check || true
+          if [ -e /tmp/probe-state ] || [ -e /tmp/probe-log ]; then
+            echo "FAIL: --check created state or log directories"
+            exit 1
+          fi
+          echo "check-mode purity OK"
+
+      - name: --check and --yes together is an error
+        run: |
+          set -Eeuo pipefail
+          rc=0
+          ./scripts/recon.sh --check --yes >/dev/null 2>&1 || rc=$?
+          if [ "$rc" != "2" ]; then
+            echo "FAIL: expected exit 2 for --check --yes, got $rc"
+            exit 1
+          fi
+          echo "mutually exclusive flags OK"
+
+      - name: No outbound scanning anywhere in the repository
+        run: |
+          set -Eeuo pipefail
+          if grep -rnE '\b(nmap|masscan|zmap|hping3)\b' scripts/ lib/; then
+            echo "FAIL: outbound scanning tool referenced"
+            exit 1
+          fi
+          echo "no scanning tools OK"

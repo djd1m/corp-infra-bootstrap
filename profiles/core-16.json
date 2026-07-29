@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "name": "core-16",
+  "default": true,
+  "description": "Default profile: everything except OpenProject; GitLab memory-constrained, observability lean; tracker is GitLab issues/boards.",
+  "node_role": "single",
+  "min_vcpu": 8,
+  "min_ram_mb": 16384,
+  "min_disk_gb": 350,
+  "gates": { "g1_steady_ratio": 0.75, "g2_cap_ratio": 1.10, "g4_disk_ratio": 1.15, "g5_headroom_mb": 512 },
+  "contention_policy": "slices-v1",
+  "services": [
+    {"id": "gitlab", "variant": "memory-constrained", "steady_mb": 8192, "cap_mb": 9216, "disk_gb": 150, "adr": "ADR-002", "opts": {"registry": false, "runner_concurrent": 1, "runner_job_cap_mb": 1536, "bundled_prometheus": false, "bundled_kas": false}},
+    {"id": "wiki", "variant": "bookstack", "steady_mb": 819, "cap_mb": 1024, "disk_gb": 10, "adr": "ADR-010"},
+    {"id": "site", "variant": "hugo-static", "steady_mb": 0, "cap_mb": 0, "disk_gb": 1, "adr": "ADR-010"},
+    {"id": "observability", "variant": "lean", "steady_mb": 1331, "cap_mb": 2048, "disk_gb": 28, "adr": "ADR-011", "opts": {"prom_retention": "30d", "prom_retention_size": "15GB", "loki_retention": "720h", "blackbox": false}},
+    {"id": "tracker", "variant": "gitlab-issues", "steady_mb": 0, "cap_mb": 0, "disk_gb": 0, "adr": "ADR-009"}
+  ],
+  "platform": [
+    {"id": "os-docker", "steady_mb": 614, "cap_mb": 1024, "disk_gb": 25},
+    {"id": "wireguard", "steady_mb": 31, "cap_mb": 51, "disk_gb": 0, "adr": "ADR-005"},
+    {"id": "caddy", "steady_mb": 102, "cap_mb": 154, "disk_gb": 2, "adr": "ADR-006"},
+    {"id": "runner", "steady_mb": 256, "cap_mb": 307, "disk_gb": 20, "adr": "ADR-002"},
+    {"id": "ci-slot", "steady_mb": 0, "cap_mb": 1536, "disk_gb": 0, "adr": "ADR-002", "opts": {"concurrent": 1, "memory": "1500m"}},
+    {"id": "backup", "steady_mb": 0, "cap_mb": 819, "disk_gb": 55, "adr": "ADR-008"},
+    {"id": "opsagent", "steady_mb": 0, "cap_mb": 614, "disk_gb": 2, "adr": "ADR-013"}
+  ],
+  "slices": {
+    "corp-core": { "MemoryLow": "10444M", "MemoryHigh": "infinity", "MemoryMax": "12442M" },
+    "corp-ci": { "MemoryLow": "0", "MemoryHigh": "1.2G", "MemoryMax": "1.5G" },
+    "corp-backup": { "MemoryLow": "0", "MemoryHigh": "600M", "MemoryMax": "800M" },
+    "corp-agent": { "MemoryLow": "0", "MemoryHigh": "400M", "MemoryMax": "600M" }
+  },
+  "offsite": {
+    "primary": "b2",
+    "alternatives": ["yandex-kz", "hetzner"],
+    "residency": "none",
+    "storage_class": "hot",
+    "retain_logs_offsite": false
+  },
+  "vpn": { "hub_role": "self", "provider_policy": "generic" }
+}

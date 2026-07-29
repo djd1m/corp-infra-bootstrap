@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corp-infra.local/schemas/escrow.schema.json",
+  "title": "corp-infra age key escrow attestation",
+  "description": "/var/lib/corp-infra/escrow/age-key.escrow.json. PUBLIC material only - the private age key itself is never stored here and never enters the restic set (04_domain_model section 5).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "recipient",
+    "fingerprint_sha256",
+    "escrowed_at",
+    "locations",
+    "attested_by",
+    "next_verification_due",
+    "rotation_policy_days"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "recipient": {
+      "description": "Public age recipient. A private key (AGE-SECRET-KEY-...) here is a contract violation.",
+      "type": "string",
+      "pattern": "^age1[0-9a-z]+$"
+    },
+    "fingerprint_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "escrowed_at": { "type": "string", "format": "date-time" },
+    "locations": {
+      "description": "QC#11: at least two independent locations, and at least two holders in total. Bus factor 1 is rejected.",
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "label", "holders"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["team-password-manager", "offline", "hsm", "other"]
+          },
+          "label": { "type": "string", "minLength": 1 },
+          "holders": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "attested_by": { "type": "string", "minLength": 1 },
+    "next_verification_due": { "type": "string", "format": "date" },
+    "rotation_policy_days": { "type": "integer", "minimum": 1, "maximum": 730 }
+  }
+}

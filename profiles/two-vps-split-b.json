@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "name": "two-vps-split-b",
+  "default": false,
+  "description": "Node B of the two-VPS split: everything except GitLab and CI. Holds the WireGuard hub 10.8.0.1, both Caddy instances and full observability. No overcommit.",
+  "node_role": "apps",
+  "min_vcpu": 4,
+  "min_ram_mb": 12288,
+  "min_disk_gb": 200,
+  "gates": { "g1_steady_ratio": 0.75, "g2_cap_ratio": 1.10, "g4_disk_ratio": 1.15, "g5_headroom_mb": 512 },
+  "contention_policy": null,
+  "services": [
+    {"id": "tracker", "variant": "openproject", "steady_mb": 4096, "cap_mb": 5120, "disk_gb": 30, "adr": "ADR-009"},
+    {"id": "wiki", "variant": "bookstack", "steady_mb": 819, "cap_mb": 1024, "disk_gb": 10, "adr": "ADR-010"},
+    {"id": "site", "variant": "hugo-static", "steady_mb": 0, "cap_mb": 0, "disk_gb": 1, "adr": "ADR-010"},
+    {"id": "observability", "variant": "full", "steady_mb": 1536, "cap_mb": 2560, "disk_gb": 45, "adr": "ADR-011", "opts": {"prom_retention": "90d", "prom_retention_size": "25GB", "loki_retention": "720h", "blackbox": true, "scrapes_both_nodes": true}}
+  ],
+  "platform": [
+    {"id": "os-docker", "steady_mb": 614, "cap_mb": 1024, "disk_gb": 25},
+    {"id": "wireguard", "steady_mb": 31, "cap_mb": 51, "disk_gb": 0, "adr": "ADR-005", "opts": {"role": "server", "address": "10.8.0.1"}},
+    {"id": "caddy", "steady_mb": 102, "cap_mb": 154, "disk_gb": 2, "adr": "ADR-006", "opts": {"instances": ["public", "internal"]}},
+    {"id": "backup", "steady_mb": 0, "cap_mb": 819, "disk_gb": 45, "adr": "ADR-008"},
+    {"id": "opsagent", "steady_mb": 0, "cap_mb": 614, "disk_gb": 2, "adr": "ADR-013"}
+  ],
+  "offsite": {
+    "primary": "b2",
+    "alternatives": ["yandex-kz", "hetzner"],
+    "residency": "none",
+    "storage_class": "hot",
+    "retain_logs_offsite": false
+  },
+  "vpn": { "hub_role": "self", "provider_policy": "generic" }
+}

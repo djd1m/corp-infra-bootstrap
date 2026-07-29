@@ -1,0 +1,24 @@
+# yamllint configuration for corp-infra (gate G-04: yamllint -d relaxed repos/).
+# Kept close to "relaxed" so that Docker Compose and GitHub Actions files stay
+# readable, while the rules that catch real breakage stay on.
+extends: relaxed
+
+rules:
+  line-length:
+    max: 120
+    level: warning
+  document-start: disable
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  truthy:
+    allowed-values: ['true', 'false', 'on']
+    check-keys: false
+  indentation:
+    spaces: consistent
+    indent-sequences: consistent
+  trailing-spaces: enable
+  new-line-at-end-of-file: enable
+
+ignore: |
+  .git/

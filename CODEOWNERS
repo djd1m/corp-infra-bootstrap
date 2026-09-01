@@ -1,0 +1,6 @@
+# Default owner for everything in this repo.
+* @djd1m
+
+# Security-sensitive surfaces require the owner's review explicitly.
+/scripts/    @djd1m
+/lib/        @djd1m

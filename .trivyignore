@@ -1,0 +1,10 @@
+# .trivyignore — accepted Trivy findings for this repo (ADR-014 item 4).
+#
+# Each non-comment, non-blank line is ONE Trivy finding id that CI will ignore:
+#   * a vulnerability id      e.g. CVE-2024-12345
+#   * a misconfiguration id   e.g. AVD-DS-0002
+#   * a secret rule id        e.g. aws-access-key-id
+#
+# Empty by design: nothing is accepted yet. Adding a line is a deliberate,
+# reviewed risk acceptance — record WHY in the commit message (and, for anything
+# non-trivial, in an ADR). Do not add blanket wildcards.

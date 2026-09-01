@@ -355,3 +355,27 @@ jobs:
             exit 1
           fi
           echo "no scanning tools OK"
+
+  supply-chain:
+    name: Trivy supply-chain scan (vuln + misconfig + secret)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy fs scan; fail on HIGH/CRITICAL, honour .trivyignore
+        run: |
+          set -Eeuo pipefail
+          # REFRESH-CHECK: the Trivy image is pinned so a scanner change can
+          # never silently alter CI. Re-pin to the current release on purpose
+          # (pinned 2026-09-01: 0.58.1); a bump is a reviewed commit, not an
+          # implicit "latest".
+          TRIVY_VERSION=0.58.1
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            aquasec/trivy:"${TRIVY_VERSION}" \
+            fs --scanners vuln,misconfig,secret \
+               --severity HIGH,CRITICAL \
+               --exit-code 1 \
+               --ignorefile .trivyignore \
+               --no-progress \
+               .
+          echo "Trivy supply-chain scan OK"

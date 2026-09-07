@@ -76,6 +76,11 @@ Humans read `for-humans/` (Russian).
 8. **Facts and judgments stay separate.** Nothing under `facts` contains the
    words ok / fail / recommended; nothing under `judgments` is recomputed by a
    consumer.
+9. **Prove live fixes before publishing templates.** When a canonical install
+   path exposes a new failure on the target host, accumulate and test the fix
+   locally through complete end-to-end success, an idempotent repeat run, and
+   the required backup/restore proof. Only then publish one minimal sufficient
+   template update; do not commit speculative one-error-at-a-time iterations.
 
 ## Ask, do not guess
 

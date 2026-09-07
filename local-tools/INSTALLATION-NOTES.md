@@ -14,6 +14,52 @@
 - Final `backup.sh --check`: exit 0. GitLab rows are correctly inconclusive on
   this apps VPS because GitLab belongs to the separate Cloud.ru server.
 
+## 2026-09-07 — application install must create safe initial admins and coverage
+
+- OpenProject upstream seeds `admin/admin` unless the initial seeder receives
+  explicit admin password variables. The public template now supplies a
+  generated password, email and display name through SOPS on the first run.
+- Publishing a manifest and waiting cannot make a service appear in backup
+  coverage: coverage records completed restic snapshots. A new service unit now
+  triggers its mandatory first service-scoped backup, rescans, and only then
+  writes its installed marker.
+- The public proxy is bound to the explicit external address, so probing a new
+  public vhost through `127.0.0.1` always produced a false warning. The probe now
+  reads `PUBLIC_BIND_IP` from the rendered Caddy environment.
+- The original coverage assertion searched the entire JSON document. A service
+  listed only under `expected` was therefore mistaken for one listed under
+  `covered`, and the installer could write its marker without a snapshot. The
+  assertion now parses only `covered`; the live first runs moved coverage from
+  `2/3` to `3/3`, then from `3/4` to `4/4` after real restic snapshots.
+
+## 2026-09-07 — public application health and restore drills
+
+- The Mattermost Team Edition image has no `curl` (and no shell), so its Docker
+  healthcheck never ran although the server, database and filestore were OK.
+  The checked command is now the bundled `mmctl system status --local`.
+- Restarting Caddy to add a first public hostname briefly returns HTTP `000`
+  while Caddy starts and ACME issues the certificate. Apply mode now waits a
+  bounded 120 seconds for valid public TLS; check mode remains single-shot.
+  Re-registering a byte-identical vhost is a no-op and no longer restarts Caddy.
+- The vhost probe appended its fallback `000` to curl's own `000`, producing
+  the misleading code `000000`. Curl output is now normalised once.
+- A service restore drill used to record `OK` when `pg_restore` was absent even
+  though no dump was validated. It now reuses an already-pulled, pinned
+  PostgreSQL image with networking disabled and a read-only scratch mount, and
+  fails if neither verifier is available. Live Mattermost and OpenProject
+  restore drills both passed `pg_restore --list`.
+
+## 2026-09-07 — Alpine PostgreSQL could not enter root-owned bind storage
+
+- Symptom: `corp-mattermost-db` repeatedly logged `mkdir: can't create directory
+  '/var/lib/postgresql/data/pgdata': Permission denied` and became unhealthy.
+- Cause: the service template created the host bind directory as `root:root
+  0750`, while `postgres:*‑alpine` drops to uid/gid `70:70` before creating
+  `PGDATA`.
+- Fix: both Mattermost and OpenProject installers assign only their dedicated
+  `pgdata` directory recursively to `70:70` before Compose starts. Application
+  storage keeps its separate application UID and no permission is widened.
+
 ## 2026-09-07 — the first real backup was blocked by its platform manifest
 
 - Symptom: `rescan-manifests.sh --check` stopped the first snapshot because

@@ -19,6 +19,10 @@ the finding can be incorporated into the canonical installation instructions.
   configuration cannot be captured by an automation log. Initial issuance
   requires a Windows handshake; later checks accept a stale handshake as proof
   of prior connectivity while still checking the live interface and firewall.
+- `complete-public-apps-bootstrap.sh --install` creates SOPS-encrypted
+  Mattermost/OpenProject configs, shows generated administrator passwords once
+  on the operator TTY for KeePassXC, installs both public services and requires
+  their first service-scoped backups before reporting success.
 - `configure-dual-s3-backup.sh --iam-ready` creates the encrypted configuration
   for Yandex Cloud primary plus Cloud.ru secondary and invokes the canonical
   backup installer. It prompts for credentials on `/dev/tty`; do not paste them

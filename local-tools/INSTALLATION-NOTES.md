@@ -1,0 +1,519 @@
+# Installation notes
+
+## 2026-09-07 — dual-S3 backup acceptance result
+
+- `install-backup.sh`: OK; both live versioning checks passed, four persistent
+  timers were enabled, and `corp-backup.slice` received the profile cap.
+- First snapshot: OK for `platform` and `vpn-proxy`; manifest coverage 2/2.
+- Local integrity: `restic check --read-data-subset=2%` found no errors.
+- Primary immutable copy: Yandex Cloud OK.
+- Secondary immutable copy: Cloud.ru OK.
+- Restore proof: the `single-file` drill restored the SSH configuration into a
+  scratch directory; recursive diff matched, the drill journal recorded OK,
+  and the verified scratch directory was removed.
+- Final `backup.sh --check`: exit 0. GitLab rows are correctly inconclusive on
+  this apps VPS because GitLab belongs to the separate Cloud.ru server.
+
+## 2026-09-07 — the first real backup was blocked by its platform manifest
+
+- Symptom: `rescan-manifests.sh --check` stopped the first snapshot because
+  `/opt/corp-infra/versions.env` and `/opt/corp-infra/**/*.enc.yaml` did not
+  resolve.
+- Cause 1: the version lock is canonical inside the bootstrap checkout at
+  `/opt/corp-infra/bootstrap/versions.env`; the platform manifest and two
+  upgrade runbooks documented a stale root-level location.
+- Cause 2: `*.enc.yaml` is a supported but profile-dependent secret format.
+  The manifest language had no way to retain that future coverage without
+  requiring at least one such file on every host.
+- Fix: point every version-lock consumer at the canonical repository file and
+  add schema-backed `optional_include[]`. Required `include[]` entries remain
+  strict; optional entries are expanded and backed up whenever present, their
+  absence is logged but is not a failure, and secret-key hygiene applies to
+  both arrays.
+
+## 2026-09-07 — freshly uploaded Cloud.ru objects were not immediately readable
+
+- Symptom: initial `rclone copy --immutable` reported a transient 403 on one
+  object, succeeded on its internal retry, but the immediately following
+  `restic cat config` failed. A later read-only check succeeded for ListObject,
+  GetObject, and `restic cat config` with the same credential.
+- Cause: a short post-write visibility/policy-propagation window at the S3
+  endpoint; treating one immediate read as final produced a false install
+  failure.
+- Fix: the mutation path still requires the copied repository to answer through
+  restic, but retries that read up to five times with a bounded five-second
+  interval. The read-only checker remains strict and reports the live result.
+
+## 2026-09-07 — Cloud.ru groups PutObject and DeleteObject in one role action
+
+- Symptom: after fixing the composite access key ID, the live versioning query
+  returned `403 AccessDenied`.
+- Immediate cause: the service account lacked `GetBucketVersioning`, provided
+  by bucket role `s3e.viewer-acl` / custom-role action
+  `s3e.bucket.viewPolicy`.
+- Deeper design issue: Cloud.ru action `s3e.bucket.edit` grants both PutObject
+  and DeleteObject. A write-capable custom role therefore cannot itself be a
+  no-delete credential, contrary to the original plan.
+- Fix: use bucket-scoped `s3e.editor`, `s3e.viewer`, and `s3e.viewer-acl`, then
+  explicitly Deny `s3:DeleteObject` and `s3:DeleteBucket` for the backup
+  service-account principal in Bucket Policy. Do not grant `s3e.admin`,
+  `s3e.tenant.edit`, or project Administrator because they bypass Bucket
+  Policy. The reusable policy is
+  `cloudru-backup-bucket-policy.json.example`.
+- Verification: the repair helper distinguishes `InvalidAccessKeyId` from
+  `AccessDenied` and requires a live `Enabled` response before changing the
+  encrypted configuration.
+
+## 2026-09-07 — Cloud.ru accepted an incomplete Access Key ID in the helper
+
+- Symptom: the dual-S3 helper encrypted the entered values, but the canonical
+  installer stopped before seeding or installing timers; Cloud.ru returned
+  `403 InvalidAccessKeyId` while reading bucket versioning.
+- Cause: Cloud.ru S3 authentication requires the complete
+  `tenant_id:key_id` or `tenant_id.key_id` value. The helper only checked that
+  the field was non-empty and therefore accepted a bare Key ID.
+- Fix: validate the provider-specific composite ID before writing encrypted
+  configuration. `repair-cloudru-backup-key.sh` checks the replacement key and
+  live versioning read-only before replacing only the Cloud.ru credential; it
+  preserves the restic password and the working Yandex configuration.
+- Documentation improvement: show `tenant_id` and Key ID as two values that
+  must be joined, and distinguish `InvalidAccessKeyId` from missing IAM actions.
+
+## 2026-09-07 — two daily S3 targets expose a false delete-permission probe
+
+- Selected layout: Yandex Cloud is the primary offsite repository; Cloud.ru is
+  an independent secondary repository with its own credentials and timer.
+- Existing partial support: `backup.sh` could copy to a secondary runtime env,
+  but `install-backup.sh` neither rendered its encrypted source nor initialized
+  the repository nor enabled the timer.
+- Documentation bug: the installer treated a successful
+  `restic forget --dry-run` as evidence that delete was allowed. Restic dry-run
+  performs no removal, so it cannot test provider IAM in either direction.
+- Fix: the installer now handles `backup-secondary.enc.env`, seeds and checks
+  both offsite repositories, and enables the secondary daily timer. Its
+  read-only check validates an explicit provider-role attestation and reads
+  the live bucket-versioning status; provider IAM remains the enforcement point.
+- Safe credential policy: Yandex uses a bucket-scoped `storage.uploader` role;
+  Cloud.ru combines bucket-scoped roles with an explicit delete Deny in Bucket
+  Policy. No effectively delete-capable credential is stored on this VPS.
+
+## 2026-09-07 — decrypted backup scratch files escaped cleanup
+
+- `bk_tmpfile` appended each temporary path to `BK_TMPFILES`, but every caller
+  invoked it through command substitution (`path="$(bk_tmpfile)"`). Bash runs
+  that function in a subshell, so the parent cleanup trap always saw an empty
+  array and could leave decrypted 0600 files in `/tmp`.
+- Fix: the function now assigns a caller variable directly in the current
+  shell; every path is registered and removed by the EXIT trap. The dual-S3
+  helper uses the same safe calling convention.
+
+## 2026-09-07 — restic remote locks contradict no-delete S3 credentials
+
+- The original design called `restic copy` against an S3 repository while also
+  requiring the VPS credential to have no `DeleteObject` permission.
+- Restic creates a destination lock and removes it on completion. Therefore a
+  genuinely no-delete credential cannot complete the documented copy path;
+  this would only become visible during the first real backup.
+- Fix for S3 targets: keep restic as the repository/restore format, but copy
+  the local repository object tree with `rclone copy --immutable`. This command
+  does not delete destination-only objects and refuses mismatched overwrites.
+  Bucket versioning is mandatory so a compromised PutObject credential cannot
+  destroy the previous version by overwriting the same key.
+
+## 2026-09-07 — an offline operator laptop blocked every downstream stage
+
+- `install-wireguard.sh --check` required a handshake newer than 300 seconds.
+  Once the Windows client was intentionally disconnected, the healthy server
+  returned exit 2; `require_stage vpn.ready` therefore blocked backup and all
+  later installation indefinitely.
+- A fresh handshake is required to establish the initial readiness marker.
+  For subsequent live checks, a peer that has handshaked at least once proves
+  the path was established; interface, forwarding, firewall and forbidden UI
+  are still checked live. A stale handshake is now warning telemetry, not an
+  inconclusive stage result.
+
+## 2026-09-02 — repository checkout is disabled by the shipped lock file
+
+- Stage: preflight before `security`.
+- Expected: `bootstrap.sh` clones the five pinned stage repositories before
+  starting the state machine.
+- Actual: `versions.env` contains `CORP_INFRA_GITHUB_ORG="<org>"`; all five
+  stage repositories are absent under `/opt/corp-infra`.
+- Behaviour: `bootstrap.sh` will warn that the organisation is unset, skip all
+  repository checkouts, and later stop because the `security` repository is
+  absent.
+- Safe remediation: set `CORP_INFRA_GITHUB_ORG` to the confirmed organisation
+  that owns all five repositories, or place verified checkouts at the paths
+  expected by the orchestrator.
+- Verification:
+
+  ```bash
+  for name in security vpn-proxy backup ent-infra pop-agents; do
+      test -d "/opt/corp-infra/$name/.git" || echo "$name: absent"
+  done
+  ./scripts/sync-lib.sh --check
+  ```
+
+- Documentation improvement: the quick start must explicitly require replacing
+  `<org>` in `versions.env` (and verifying access to every pinned repository)
+  before invoking `bootstrap.sh`.
+
+## 2026-09-02 — unprivileged checks cannot open the standard log file
+
+- Stage: disk/recon preflight.
+- Expected: read-only checks print their verdict.
+- Actual: when run as an unprivileged user, scripts also print a warning that
+  `/var/log/corp-infra/...` is not writable and fall back to stdout.
+- Impact: none on the check result; the commands still return their documented
+  verdicts.
+- Documentation improvement: describe this warning as expected for an
+  unprivileged preflight, and use root for the actual bootstrap run.
+
+## 2026-09-02 — private GitHub repositories are not accessible from the host
+
+- Stage: repository checkout preflight.
+- Expected: each pinned `v1.0.0` tag can be resolved before bootstrap starts.
+- Actual: unauthenticated HTTPS asks for GitHub credentials; `gh` is not
+  installed; SSH access to `github.com:22` times out.
+- Impact: bootstrap cannot clone any stage repository yet.
+- Safe remediation: configure read access over HTTPS, or configure GitHub SSH
+  access over an allowed endpoint such as port 443, then verify every pinned
+  tag with `git ls-remote` before running bootstrap.
+- Documentation improvement: add GitHub authentication and connectivity to the
+  quick-start prerequisites and provide a non-interactive verification command.
+
+Follow-up: the token is stored at `/root/.secrets/github_token` (underscore,
+not hyphen). Git Smart HTTP requires a username/password credential shape here;
+an `Authorization: Bearer` extra header still caused Git to request a username.
+The local helper `github-credential-helper.sh` supplies `x-access-token` and the
+token ephemerally without storing it in a remote URL or Git configuration.
+
+## 2026-09-02 — pinned release tags do not exist
+
+- Stage: repository checkout preflight.
+- Expected: `versions.env` pins `v1.0.0` for all five stage repositories.
+- Actual: all repositories are accessible, but none has any Git tags.
+- Temporary installation decision: use the current `main` heads, record their
+  commit IDs, and do not create or push tags as part of server installation.
+- Documentation improvement: publish the pinned release tags, or document a
+  commit-based development installation path.
+
+## 2026-09-02 — cached recon predates the disk resize
+
+- Stage: sizing preflight.
+- Expected: bootstrap sizing uses the resized root filesystem.
+- Actual: `/var/lib/corp-infra/recon/latest.json` was still fresh by the 24-hour
+  rule, but recorded 196 GB and a failing profile recommendation. A current
+  read-only recon measured 216 GB.
+- Safe remediation: regenerate the stored recon after changing VPS resources,
+  even when the previous document is younger than 24 hours.
+- Documentation improvement: explicitly invalidate/re-run recon after CPU, RAM,
+  disk, network, or provider changes.
+
+## 2026-09-02 — this host is the apps node, not the GitLab node
+
+- Confirmed deployment profile: `two-vps-split-b` (`node_role: apps`).
+- GitLab and CI are reserved for the second server in Cloud.ru and must not be
+  installed on this host.
+- The profile correctly includes only tracker (OpenProject), wiki, site, and
+  observability business services.
+
+## 2026-09-02 — Mattermost is missing from the corp-infra service model
+
+- Confirmed placement: Mattermost runs on this apps node.
+- Research input: `mattermost-k8s-adrs.zip`, SHA-256
+  `cfe1352d018cce48ef26f85a71c5ee295c7d87cab6c18b88b045209f6c50169b`.
+- Adopted findings: Mattermost Team Edition with PostgreSQL behind HTTPS;
+  Mattermost is the user-facing agent console; an Agent Gateway provides a
+  common Claude/Codex session contract; runners are isolated per project and
+  each task uses its own Git worktree; credentials are rotated outside chat.
+- Kubernetes/Kompose is deferred. This installation already has a Compose-based
+  service contract, and the research describes Kompose only as a bootstrap
+  generator whose output is not production-ready without manual design.
+- Missing implementation: profile budget, pinned Compose service, encrypted
+  secret template, backup manifest/hooks, vhost registration, health check and
+  installer entry point.
+- Product mapping: Grafana is already part of `observability`; Jira is not
+  deployed, and the selected profile intentionally uses OpenProject CE as the
+  tracker.
+
+## 2026-09-02 — security prerequisites are not bootstrapped
+
+- Stage: immediately before applying `security`.
+- Present: `fail2ban-client`, `unattended-upgrade`.
+- Missing: `ufw`, `age-keygen`, `sops`; `auditctl` is also missing but the
+  script explicitly treats auditd as advisory.
+- Expected: the documented bare-VPS quick start can run `harden.sh` directly.
+- Actual: `harden.sh` calls `require_cmd ufw` and later `require_cmd age-keygen
+  sops`, but neither it nor the umbrella installs these hard dependencies.
+- Impact: applying the script now would stop partway through the security
+  stage.
+- Documentation/implementation improvement: add a checked prerequisite
+  installer (including an authenticated, pinned source for sops), or list exact
+  installation commands before the first mutation.
+
+### Package-install side effect
+
+Installing `ufw age auditd` from Ubuntu removed `iptables-persistent` and
+`netfilter-persistent` and `needrestart` restarted SSH plus several systemd
+services. The SSH session survived and `sshd -t` remained valid. Post-checks:
+`ssh`, `docker`, `auditd`, and `fail2ban` were active; UFW was still inactive.
+Docker's runtime chains remained present. Two pre-existing INPUT drops for TCP
+ports 3389 and 2096 were still in memory, but their former persistence mechanism
+was removed. The installation guide should call out this package conflict and
+verify whether those provider rules are intentionally replaced by the canonical
+UFW perimeter before enabling UFW.
+
+## 2026-09-02 — first-run secrets policy prevents the documented escrow flow
+
+- Stage: `security`, after the host baseline was applied.
+- Expected by `harden.sh`: `secrets-init.sh` may return `2` on the first run
+  while `ci` and `break-glass` recipients remain placeholders; the prod
+  recipient should still be accepted and the private key display/escrow gate
+  should follow.
+- Actual: `secrets-init.sh` attempted its SOPS round-trip with the placeholder
+  recipients, failed encryption, and returned `1`. `harden.sh` treated this as
+  fatal and exited before `print_private_key_once` was called. Bootstrap marked
+  `stages.security` as `failed` and never reached its documented escrow STOP.
+- Current reality: SSH, Docker, fail2ban and auditd are active; UFW is active
+  with the five canonical ports and SSH still open from `Anywhere`; the age key
+  exists at the canonical path with mode 0600; escrow is not attested.
+- Required improvement: on an initial prod-recipient update, either omit
+  placeholder roles from `creation_rules` until assigned, or classify the
+  placeholder-caused round-trip as inconclusive (`2`) so the human escrow flow
+  is reachable. Add an end-to-end clean-host test that proves the key display
+  precedes the escrow STOP.
+
+## 2026-09-02 — interactive escrow confirmation rejected visible `y`
+
+- The human-supplied fingerprint was accepted, proving that the escrow copy
+  matched the host recipient.
+- At the final `record the escrow attestation ...? [y/N]` prompt, a visible
+  `y` entered from Windows Terminal was handled as a decline.
+- No escrow document or marker was written.
+- Safe retry: the human repeats the same independently derived fingerprint and
+  locations with the documented `--yes` flag. This bypasses only the final
+  write confirmation; it does not derive or bypass fingerprint validation.
+- Improvement: trim carriage returns and surrounding whitespace in `confirm()`
+  before matching the answer, and add a CRLF-input test.
+
+## 2026-09-07 — `bootstrap --stage security` marks the whole run done
+
+- After a successful single-stage security reconciliation, bootstrap correctly
+  wrote `stages.security=ok` and published the live-backed marker.
+- It then unconditionally wrote `current_stage=done` and presented the final
+  disaster-recovery STOP even though VPN, backup, ent-infra and pop-agents were
+  still pending.
+- With `--yes`, both the already-completed escrow STOP and the not-yet-possible
+  disaster-recovery STOP were auto-confirmed.
+- The final stage map remained honest (security `ok`, all later stages pending),
+  but `current_stage=done` and the STOP output were misleading.
+- Improvement: single-stage mode must not set the global run to `done`; the DR
+  gate must run only when every stage is live-verified `ok`; human STOP gates
+  must never be bypassed merely because `--yes` was supplied.
+
+## 2026-09-07 — adminVPS Netherlands had no exact provider policy
+
+- Actual hosting class: adminVPS, Netherlands; the real base domain remains
+  host-local and documentation uses `<base-domain>`.
+- The profile `two-vps-split-b` used `generic`, whose policy says outbound port
+  scanning is allowed. The adminVPS offer forbids it in every location.
+- `adminvps-ru` carried the right technical constraints for the European
+  locations but was the wrong declared provider/location identity.
+- Fix prepared in the bootstrap source: add `adminvps-eu`, include it in all
+  schemas and documentation, and select it in `two-vps-split-b`.
+- Installation rule remains strict: no outbound scan; reachability is checked
+  by the operator from their own Windows workstation.
+
+## 2026-09-07 — first WireGuard peer requires a real human terminal
+
+- `install-wireguard.sh` automatically issues the initial `operator` peer.
+  The rendered configuration contains its private key and is intentionally
+  emitted outside the log on file descriptor 9.
+- Running this step through an automation capture channel would expose the
+  credential and would violate the R3 rule against autonomous peer issuance.
+- `local-tools/complete-wireguard-bootstrap.sh` requires a TTY and an explicit
+  `ISSUE` confirmation, invokes the canonical installer, pauses for the Windows
+  client to connect, and invokes it again to publish `vpn.ready` only after a
+  fresh handshake.
+- Windows Terminal again displayed the exact expected answer while the helper
+  rejected it. The helper now removes CRLF, surrounding whitespace and the
+  standard bracketed-paste start/end sequences before comparing the still-exact
+  keyword `ISSUE`.
+- The first real attempt then stopped before installing WireGuard because
+  `require_stage` received `"/opt/.../harden.sh --check"` as one executable
+  name instead of receiving the executable and `--check` as separate argv
+  elements. The security marker was valid and a direct `harden.sh --check`
+  returned 0; no `wg0`, package, server key, or operator peer had been created.
+- The helper incorrectly treated every installer exit 2 as the expected
+  "configuration created, handshake pending" state and invited the operator to
+  import a configuration that had never been printed. It now continues on exit
+  2 only when both live `wg0` and `/etc/wireguard/peers/operator.conf` exist;
+  otherwise it stops explicitly. All four malformed `require_stage` call sites
+  in `vpn-proxy` now pass `--check` as its own argument.
+- The resumed run reached peer creation, but `sops` inherited
+  `/opt/corp-infra/security/.sops.yaml` from the caller's working directory and
+  rejected `/etc/wireguard/peers/operator.conf` with `no matching creation
+  rules found`. The live peer and its 0600 operational file were already
+  created, but no encrypted copy or terminal `BEGIN/END` block followed.
+- `wg-user.sh` now disables implicit config discovery when it supplies the age
+  recipient explicitly, and an idempotent retry repairs a missing encrypted
+  copy before reprinting the existing peer configuration. The helper also
+  recognises this exact partial state as resumable. `.gitignore` now re-includes
+  `secrets/peers/*.enc.conf`; previously the ignored parent directory prevented
+  the documented encrypted peer backups from being tracked.
+- A second Windows Terminal attempt visibly entered `ISSUE` but still delivered
+  a byte sequence the prompt rejected. Instead of broadening fuzzy input
+  acceptance, the helper now requires the unambiguous command-line flag
+  `--issue-operator`. Running that exact command is the human R3 decision; the
+  TTY requirement remains, so the private configuration cannot be captured by
+  non-interactive automation.
+
+## 2026-09-07 — business services must be public, not VPN-only
+
+- Operator decision: Mattermost and OpenProject are employee-facing services
+  and must work without a WireGuard client. Templates use
+  `chat.<base-domain>` and `projects.<base-domain>`.
+- Databases and container ports remain private. Only `80/443` on the public
+  Caddy instance may face the Internet; each public frontend needs its own
+  explicit Docker network path to that proxy.
+- Grafana and infrastructure administration remain VPN-only.
+- Current mismatch: `install-tracker.sh` hard-codes
+  `tracker.corp.<domain>`, registers only an internal vhost, and treats every
+  public answer as `INV-ENT-7` failure. This is a product/plan mismatch, not an
+  installation error.
+- Orchestration mismatch: bootstrap does not accept or persist a corporate
+  domain and does not pass one to the proxy or service installers, although
+  those installers require it. The source plan must gain one authoritative
+  domain input before an unattended five-stage run can work.
+
+### Source fixes prepared
+
+- Bootstrap now accepts `--domain`, persists it in `state.json`, and passes it
+  to the proxy and all ent-infra installers.
+- `two-vps-split-b` explicitly declares public `projects` and `chat` services.
+- OpenProject uses a dedicated frontend network shared only with the selected
+  Caddy instance; PostgreSQL and Memcached remain on `internal:true`.
+
+## 2026-09-07 — wildcard public Caddy conflicts with VPN-only Caddy on 443
+
+- The first proxy apply created both Docker networks and started
+  `corp-caddy-public`, then Docker refused `corp-caddy-internal` with `Bind for
+  0.0.0.0:443 failed: port is already allocated`.
+- Compose had correctly rendered the internal binding as `10.8.0.1:443`; the
+  error is the kernel-level collision with the public container already bound
+  to wildcard `0.0.0.0:443`. A wildcard IPv4 socket includes the wg0 address,
+  so the documented expectation that both sockets coexist is impossible on one
+  host.
+- The host has distinct public and WireGuard addresses. The safe single-host
+  design is to bind public Caddy to
+  the primary external-interface address explicitly and internal Caddy to the
+  wg0 address explicitly. This keeps zone separation by network path but
+  requires a reviewed change to the documented `0.0.0.0` public binding.
+- Partial state after the failure: `corp-caddy-public` healthy on public
+  80/443, `corp-caddy-internal` created but not running, both Docker networks
+  present, and no application vhosts published.
+- After the address fix both Caddy instances became healthy, but proxy apply
+  still failed while publishing its backup manifest. It treated the mere
+  presence of the cloned backup repository as proof that stage 3 was installed
+  and ran `rescan-manifests.sh` before `backup.ready` existed. That creates a
+  dependency cycle: stage 2 cannot require a live stage 3 when the fixed order
+  is `vpn-proxy -> backup`.
+- Proxy manifest publication now checks the stage state. Before `backup.ready`,
+  it publishes the manifest and returns an explicit deferred-rescan warning;
+  after `backup.ready`, a missing or failing rescan remains fatal.
+
+## 2026-09-07 — backup check accepted a profile but did not load it
+
+- `install-backup.sh --check --profile two-vps-split-b` reported that
+  `profile.offsite.primary` was empty, although the profile selects a provider.
+- The check branch called the offsite gate before any `profile_load`; only the
+  apply branch loaded the profile. The CLI therefore promised an assertion it
+  could not perform.
+- Check and apply now use one `load_selected_profile` function. The corrected
+  check distinguishes "no provider selected" from "provider selected but
+  runtime credentials are not configured".
+- Mattermost Team Edition is a full service unit: exact image tag, isolated
+  PostgreSQL, public vhost, logical dump hook and backup manifest.
+
+## 2026-09-07 — container registry transient 500
+
+- Docker Hub returned HTTP 500 to manifest HEAD requests for both Mattermost
+  and the official PostgreSQL image, so the first verification could not
+  distinguish a missing tag from a registry failure.
+- Retrying the same read-only requests, without changing tags, succeeded:
+  Mattermost Team Edition `11.7.8`, PostgreSQL `16.9-alpine`, OpenProject
+  `17.8.0-slim`, PostgreSQL `17.10-alpine`, Memcached `1.6.39-alpine` and
+  Hocuspocus `17.8.0` all expose valid OCI manifests.
+- Improvement: image preflight should retry transient registry 5xx responses
+  and retain the exact requested tag.
+
+## 2026-09-07 — OpenProject compose was stale and incomplete
+
+- The repository pinned OpenProject `16.4`; the current exact release is
+  `17.8.0`, and upstream recommends the `-slim` image for Compose production.
+- The old compose configured `OPENPROJECT_RAILS__CACHE__STORE=memcache` but did
+  not define any Memcached container. It also had no seeder or cron process.
+- The corrected service unit follows upstream stable/17 process roles while
+  omitting upstream's Docker-socket autoheal and disabling optional real-time
+  collaboration until its separate WebSocket route is deliberately designed.
+
+## 2026-09-07 — targeted vhost check ignored its target
+
+- `register-vhost.sh --check --service ... --fqdn ... --zone ...` parsed those
+  arguments but ran only a global fragment validation. A service could report
+  its own vhost registered because an unrelated fragment was healthy.
+- The check now proves the exact fragment, FQDN, service id and requested
+  Docker network. It also proves the exact upstream and the selected Caddy
+  container's live attachment to that network.
+
+## 2026-09-07 — swap/OOM policy exists in prose but not in the baseline
+
+- Recon reports 511 MB of active `/swapfile`; `/etc/fstab` enables it at boot.
+- The quick start says swap must be disabled and observability has a firing
+  alert for any configured swap, but `harden.sh --check` does not inspect swap
+  and returned `OK`.
+- `systemd-oomd` is not installed and no `corp-core`, `corp-ci` or
+  `corp-agent` slice units exist; only the backup repository ships
+  `corp-backup.slice`.
+- The authoritative sizing result still classifies this as a warning, not a
+  blocker, and the revised `two-vps-split-b` profile passes G1/G2/G4. Do not
+  merely run `swapoff`: first implement and verify the replacement oomd/slice
+  policy owned by the source plan.
+
+## 2026-09-07 — source verification commands require their documented context
+
+- Direct `docker compose config` for the Caddy files fails before proxy
+  installation because `/etc/corp-infra/caddy/.env` intentionally does not yet
+  exist. CI seeds a stub only inside its disposable runner; do not create that
+  runtime file on a production host to make a static check green.
+- `scripts/dr-coverage-check.py` is invoked through `python3` and requires both
+  `--manifest manifests/platform.backup-manifest.json` and
+  `--expected config/dr-coverage.expected.json`. Calling it as an executable or
+  omitting these flags is an operator-command error, not a coverage failure.
+
+Follow-up: the token is stored at `/root/.secrets/github_token`. Because shell
+redirections are evaluated before `sudo`, `sudo tr ... < /root/...` still reads
+the file as the unprivileged shell and fails. A command such as
+`sudo cat /root/.secrets/github_token | tr -d '\\r\\n'` performs the read in
+the privileged process. Never enable shell tracing around this operation.
+
+Authentication with GitHub Smart HTTP requires the token in a Basic
+`x-access-token:<token>` credential for these Git operations; a Bearer header
+did not authenticate `git ls-remote`.
+
+## 2026-09-02 — pinned release tags do not exist
+
+- Stage: repository checkout preflight.
+- Expected: `versions.env` pins `v1.0.0` for every stage repository and
+  `git ls-remote --tags` resolves those refs.
+- Actual: authentication succeeds and all five repositories expose `main`, but
+  none of them exposes any tag.
+- Impact: the documented bootstrap clone command uses `--branch v1.0.0` and
+  cannot check out any stage repository.
+- Safe remediation: publish the reviewed `v1.0.0` tags required by the lock
+  file, or intentionally revise the versioning contract and bootstrap logic.
+  Do not silently substitute `main` for the pinned release.
+- Documentation improvement: release preparation should verify that every
+  version in `versions.env` exists remotely before the quick start is given to
+  an operator.

@@ -127,7 +127,7 @@ evaluate_profile() {
 check_catalog() {
     local dir="$1"
     local defaults=0 rc=0 f name base
-    local -r allowed_services=" gitlab tracker wiki site observability "
+    local -r allowed_services=" gitlab mattermost tracker wiki site observability "
     local -r allowed_platform=" os-docker wireguard caddy backup opsagent runner ci-slot "
 
     for f in "$dir"/*.json; do

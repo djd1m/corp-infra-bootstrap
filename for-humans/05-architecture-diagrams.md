@@ -46,8 +46,10 @@ flowchart LR
     end
 
     operator -->|приватный административный путь| git_vps
-    app_vps -. резервные копии .-> offsite[(Offsite backup storage)]
-    git_vps -. резервные копии .-> offsite
+    app_vps -. immutable backup .-> offsite_primary[(Primary object storage<br/>Yandex Cloud)]
+    app_vps -. independent immutable backup .-> offsite_secondary[(Secondary object storage<br/>Cloud.ru)]
+    git_vps -. резервные копии .-> offsite_primary
+    git_vps -. резервные копии .-> offsite_secondary
 ```
 
 Основное правило: Mattermost и OpenProject — явно публичные бизнес-сервисы;
@@ -85,6 +87,8 @@ flowchart TB
             metrics[(Metrics and logs)]
         end
 
+        local_restic[(Local restic repository)]
+
         ext_if --> firewall --> public_caddy
         wg_if --> firewall --> internal_caddy
         public_caddy -->|отдельное ACL-подключение| mm_web
@@ -93,10 +97,17 @@ flowchart TB
         mm_web --> mm_db
         op_web --> op_db
         admin_web --> metrics
+        mm_db -. pg_dump .-> local_restic
+        op_db -. pg_dump .-> local_restic
     end
+
+    primary_s3[(Primary S3<br/>versioning + no-delete key)]
+    secondary_s3[(Secondary S3<br/>versioning + no-delete policy)]
 
     public_client -->|HTTP/HTTPS| ext_if
     vpn_client -->|VPN| wg_if
+    local_restic -. daily immutable copy .-> primary_s3
+    local_restic -. separate daily timer .-> secondary_s3
 ```
 
 Инварианты шаблона:
@@ -107,4 +118,6 @@ flowchart TB
 - базы, cache, метрики и логи остаются в backend-сетях без внешнего маршрута;
 - секреты существуют только как SOPS-зашифрованные файлы и runtime-файлы 0600;
 - backup вводится до появления данных приложений;
+- primary и secondary backup находятся у разных S3-провайдеров, имеют разные
+  ключи, versioning и отдельные расписания;
 - GitLab относится к VPS B и пропускается при установке VPS A.

@@ -19,17 +19,17 @@ verdict means changing one boolean here — no script is rewritten.
 указывает конкретный раздел. Внешних ссылок в этих файлах нет намеренно — ссылка
 на первоисточник живёт в отчёте ресёрча, который верифицирован отдельно.
 
-## Четыре записи
+## Пять записей
 
-| Поле | `adminvps-ru` | `adminvps-kz` | `yandex-kz` | `generic` |
-|---|---|---|---|---|
-| `vpn_hub_allowed` | `true` | **`false`** | `true` | `true` |
-| `outbound_portscan_allowed` | `false` | `false` | `true` | `true` |
-| `s3_native` | `false` | `false` | `true` | `false` |
-| `s3_endpoint` | — | — | `https://storage.yandexcloud.kz` | — |
-| `s3_region` | — | — | `kz1` | — |
-| `default_sg_open` | `false` | `false` | **`true`** | `false` |
-| `smtp_egress` | `relay-587` | `relay-587` | `relay-587` | `direct` |
+| Поле | `adminvps-ru` | `adminvps-eu` | `adminvps-kz` | `yandex-kz` | `generic` |
+|---|---|---|---|---|---|
+| `vpn_hub_allowed` | `true` | `true` | **`false`** | `true` | `true` |
+| `outbound_portscan_allowed` | `false` | `false` | `false` | `true` | `true` |
+| `s3_native` | `false` | `false` | `false` | `true` | `false` |
+| `s3_endpoint` | — | — | — | `https://storage.yandexcloud.kz` | — |
+| `s3_region` | — | — | — | `kz1` | — |
+| `default_sg_open` | `false` | `false` | `false` | **`true`** | `false` |
+| `smtp_egress` | `relay-587` | `relay-587` | `relay-587` | `relay-587` | `direct` |
 
 `generic` — дефолт, когда `provider_hint` не определился. Максимально
 разрешительный по политике, но `s3_native: false`: офсайт-цель всегда задаётся
@@ -44,7 +44,8 @@ verdict means changing one boolean here — no script is rewritten.
 VPN-сервис для третьих лиц или любой VPN, включая административный — вторым
 источником не подтверждена. Поэтому:
 
-- `adminvps-kz.json` содержит `vpn_hub_allowed: false`;
+- `adminvps-kz.json` содержит `vpn_hub_allowed: false`, а
+  `adminvps-ru.json` и `adminvps-eu.json` — `true`;
 - `install-wireguard.sh` в репе `vpn-proxy` при `vpn_hub_allowed=false` **и**
   `profile.vpn.hub_role=self` выходит с кодом 1 и явным сообщением, предлагая
   `hub_role: external`;
@@ -57,7 +58,7 @@ VPN-сервис для третьих лиц или любой VPN, включ�
 
 ### 2. Сканирование портов запрещено офертой
 
-`outbound_portscan_allowed: false` у обоих adminVPS. На практике это не флаг,
+`outbound_portscan_allowed: false` у всех записей adminVPS. На практике это не флаг,
 а безусловное правило всего репо-сета: **ни один скрипт corp-infra не выполняет
 исходящих сканов**. Проверка портов — только локальные листенеры через
 `ss -Hln`, функция `port_free` в `../lib/common.sh`. Внешняя проверка

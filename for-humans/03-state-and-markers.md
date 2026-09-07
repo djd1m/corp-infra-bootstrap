@@ -80,7 +80,7 @@ sudo ./scripts/state.sh get stages.backup
 Закрытое множество имён — других маркеров не бывает:
 
 `security.hardened` · `secrets.escrow.ok` · `vpn.ready` · `proxy.ready` ·
-`backup.ready` · `ent-infra.{gitlab,tracker,wiki,site,observability}.installed` ·
+`backup.ready` · `ent-infra.{gitlab,mattermost,tracker,wiki,site,observability}.installed` ·
 `agents.ready`
 
 Запись атомарна: сначала `<file>.tmp`, потом `mv`. Перезапись разрешена — это и

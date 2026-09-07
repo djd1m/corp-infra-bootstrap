@@ -51,7 +51,8 @@ check.** The disagreement is the signal. Fix reality.
 
 ## Stage entry points
 
-Fixed. `bootstrap.sh` calls them with `--yes --profile <name>`:
+Fixed. `bootstrap.sh` calls them with `--yes --profile <name>` and passes the
+immutable `--domain` to the proxy and business-service installers:
 
 | Stage | Repository | Entry scripts | Marker used for the transition |
 |---|---|---|---|
@@ -81,6 +82,15 @@ The escrow gate additionally hard-blocks stage 3: `install-backup.sh` requires
 the `secrets.escrow.ok` marker. The reasoning is circular-dependency avoidance —
 the restic password lives in a sops-encrypted file decrypted by the age key, so
 a backup whose key is unrecoverable is not a backup.
+
+`--yes` answers ordinary mutation confirmations only. It never closes a STOP
+gate. A STOP gate requires a human TTY unless the independent live check already
+proves the external action, such as an accepted escrow attestation or a fresh
+operator WireGuard handshake.
+
+`--stage <name>` reconciles exactly one stage. It does not write
+`current_stage=done` and does not present the final disaster-recovery gate while
+later stages remain pending.
 
 ## Profile resolution and INV-BS-2
 

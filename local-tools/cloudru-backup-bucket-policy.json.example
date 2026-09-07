@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Id": "CorpInfraBackupNoDelete",
+  "Statement": [
+    {
+      "Sid": "DenyBackupObjectDeletion",
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "arn:aws:iam::<tenant_id>:service_account/<service_account_id>"
+      },
+      "Action": "s3:DeleteObject",
+      "Resource": "arn:aws:s3:::<bucket_name>/*"
+    },
+    {
+      "Sid": "DenyBackupBucketDeletion",
+      "Effect": "Deny",
+      "Principal": {
+        "AWS": "arn:aws:iam::<tenant_id>:service_account/<service_account_id>"
+      },
+      "Action": "s3:DeleteBucket",
+      "Resource": "arn:aws:s3:::<bucket_name>"
+    }
+  ]
+}

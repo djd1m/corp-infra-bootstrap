@@ -30,8 +30,8 @@ Collects environment facts and derives sizing judgments. Writes
   --check            validate the existing latest.json; zero writes
   --json             print JSON to stdout only; zero writes, no logging
   --profile <name>   assert a profile instead of the recommended one
-  --provider <id>    override the provider heuristic (adminvps-ru, adminvps-kz,
-                     yandex-kz, generic)
+  --provider <id>    override the provider heuristic (adminvps-ru, adminvps-eu,
+                     adminvps-kz, yandex-kz, generic)
   --quiet            log to file only; stdout is one result line
   --help / --version
 

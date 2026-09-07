@@ -60,7 +60,7 @@
         "additionalProperties": false,
         "required": ["id", "variant", "steady_mb", "cap_mb", "disk_gb", "adr"],
         "properties": {
-          "id": { "type": "string", "enum": ["gitlab", "tracker", "wiki", "site", "observability"] },
+          "id": { "type": "string", "enum": ["gitlab", "mattermost", "tracker", "wiki", "site", "observability"] },
           "variant": { "type": "string", "minLength": 1 },
           "steady_mb": { "type": "integer", "minimum": 0 },
           "cap_mb": { "type": "integer", "minimum": 0 },
@@ -107,10 +107,10 @@
       "additionalProperties": false,
       "required": ["primary", "alternatives", "residency", "storage_class", "retain_logs_offsite"],
       "properties": {
-        "primary": { "type": "string", "enum": ["b2", "yandex-kz", "hetzner"] },
+        "primary": { "type": "string", "enum": ["yandex-ru", "cloudru"] },
         "alternatives": {
           "type": "array",
-          "items": { "type": "string", "enum": ["b2", "yandex-kz", "hetzner"] }
+          "items": { "type": "string", "enum": ["yandex-ru", "cloudru"] }
         },
         "residency": { "type": "string", "enum": ["none", "RK", "RU", "EU"] },
         "storage_class": { "type": "string", "enum": ["hot", "COLD", "ICE"] },
@@ -126,7 +126,7 @@
         "hub_role": { "type": "string", "enum": ["self", "external"] },
         "provider_policy": {
           "type": "string",
-          "enum": ["adminvps-ru", "adminvps-kz", "yandex-kz", "generic"]
+          "enum": ["adminvps-ru", "adminvps-eu", "adminvps-kz", "yandex-kz", "generic"]
         }
       }
     }

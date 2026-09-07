@@ -32,9 +32,9 @@
     "corp-agent": { "MemoryLow": "0", "MemoryHigh": "400M", "MemoryMax": "600M" }
   },
   "offsite": {
-    "primary": "b2",
-    "alternatives": ["yandex-kz", "hetzner"],
-    "residency": "none",
+    "primary": "yandex-ru",
+    "alternatives": ["cloudru"],
+    "residency": "RU",
     "storage_class": "hot",
     "retain_logs_offsite": false
   },

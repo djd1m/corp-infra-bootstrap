@@ -25,6 +25,11 @@
       "type": "boolean"
     },
     "node_role": { "type": "string", "enum": ["single", "git", "apps"] },
+    "domain": {
+      "description": "Immutable corporate base domain supplied to the proxy and business-service installers.",
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+    },
     "current_stage": {
       "type": "string",
       "enum": ["none", "security", "vpn-proxy", "backup", "ent-infra", "pop-agents", "done"]

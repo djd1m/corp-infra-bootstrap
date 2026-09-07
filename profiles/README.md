@@ -29,7 +29,7 @@ CI пересчитывает их заново — если таблица в �
 | `all-in-one-32.json` | `single` | 8 / 32768 MB / 500 GB | 19742 MB (60 %) | 29593 MB (90 %) | `slices-v1` | OpenProject CE |
 | `core-16.json` **(default)** | `single` | 8 / 16384 MB / 350 GB | 11345 MB (69 %) | 16793 MB (102.5 %) | `slices-v1` | GitLab issues |
 | `two-vps-split-a.json` | `git` | 8 / 16384 MB / 350 GB | 11448 MB (70 %) | 16619 MB (101 %) | `slices-v1` | — |
-| `two-vps-split-b.json` | `apps` | 4 / 12288 MB / 200 GB | 7198 MB (59 %) | 11366 MB (93 %) | `null` | OpenProject CE |
+| `two-vps-split-b.json` | `apps` | 4 / 15360 MB / 210 GB | 9246 MB (60 %) | 15462 MB (101 %) | `slices-v1` | OpenProject CE + Mattermost |
 
 Ровно один профиль имеет `"default": true`. Это проверяется гейтом.
 
@@ -76,11 +76,11 @@ CI пересчитывает их заново — если таблица в �
 Обязательные поля перечислены в `../schemas/profile.schema.json`. Ключевые:
 
 - `services[]` — то, что видит пользователь. `id` из закрытого множества:
-  `gitlab`, `tracker`, `wiki`, `site`, `observability`.
+  `gitlab`, `mattermost`, `tracker`, `wiki`, `site`, `observability`.
 - `platform[]` — то, что есть всегда. `id` из закрытого множества:
   `os-docker`, `wireguard`, `caddy`, `backup`, `opsagent`, `runner`, `ci-slot`.
 - `offsite` — цель офсайт-бэкапа. **Конфиг, а не код**: смена цели с B2 на
-  Yandex Object Storage KZ — это изменение значения `offsite.primary` и
+  Yandex Object Storage или Cloud.ru — это изменение значения `offsite.primary` и
   подстановка соответствующего env-шаблона в репе `backup`. Ни одна строка
   `backup.sh` не меняется.
 - `vpn` — `hub_role` (`self` или `external`) и `provider_policy` — id записи из

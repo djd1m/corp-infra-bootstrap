@@ -14,7 +14,8 @@ shell-библиотека, профили развёртывания и пят�
 
 `corp-infra-bootstrap` — единственная точка входа в набор из шести репозиториев,
 который превращает чистый VPS в рабочую корпоративную инфраструктуру: git,
-трекер, вики, сайт, VPN, обратный прокси, мониторинг, бэкапы и AI-оператор.
+Mattermost, трекер, вики, сайт, VPN, обратный прокси, мониторинг, бэкапы и
+AI-оператор.
 
 Эта репа сама почти ничего не устанавливает. Она отвечает за **оркестрацию**:
 
@@ -37,7 +38,7 @@ shell-библиотека, профили развёртывания и пят�
 | 1 | `security` | `corp-infra-security` | Базлайн хоста: sshd, ufw, fail2ban, unattended-upgrades, sysctl, auditd; генерация age-ключа и escrow | `security.hardened`, `secrets.escrow.ok` |
 | 2 | `vpn-proxy` | `corp-infra-vpn-proxy` | WireGuard-хаб и два Caddy: публичный и внутренний (только через VPN) | `vpn.ready`, `proxy.ready` |
 | 3 | `backup` | `corp-infra-backup` | restic 3-2-1, локальный репозиторий плюс offsite, таймеры, учения | `backup.ready` |
-| 4 | `ent-infra` | `corp-infra-ent-infra` | GitLab, трекер, вики, сайт, observability — по составу профиля | `ent-infra.<svc>.installed` |
+| 4 | `ent-infra` | `corp-infra-ent-infra` | GitLab, Mattermost, трекер, вики, сайт, observability — по составу профиля | `ent-infra.<svc>.installed` |
 | 5 | `pop-agents` | `corp-infra-pop-agents` | AI-оператор `opsagent` с минимальными правами и runbooks | `agents.ready` |
 
 **Почему бэкап третьим, а не последним.** Инфраструктура бэкапа готова *до*
@@ -54,7 +55,8 @@ shell-библиотека, профили развёртывания и пят�
 ```bash
 git clone https://github.com/<org>/corp-infra-bootstrap.git /opt/corp-infra/bootstrap
 /opt/corp-infra/bootstrap/scripts/recon.sh --json | python3 -m json.tool
-sudo /opt/corp-infra/bootstrap/scripts/bootstrap.sh --profile core-16
+sudo /opt/corp-infra/bootstrap/scripts/bootstrap.sh --profile core-16 \
+    --domain example.com
 ```
 
 Первая команда ничего не меняет: `recon.sh --json` только измеряет хост и
@@ -73,7 +75,7 @@ sudo /opt/corp-infra/bootstrap/scripts/bootstrap.sh --profile core-16
 | `all-in-one-32` | 8 / 32 GB / 500 GB | всё, включая OpenProject | 19.28 GB (60 %) | 28.90 GB (90 %) | OpenProject CE |
 | **`core-16`** (по умолчанию) | 8 / 16 GB / 350 GB | всё, кроме OpenProject; GitLab memory-constrained | 11.08 GB (69 %) | 16.40 GB (102.5 %) | GitLab issues |
 | `two-vps-split-a` | 8 / 16 GB / 350 GB | узел «git»: GitLab и CI | 11.18 GB (70 %) | 16.23 GB (101 %) | — |
-| `two-vps-split-b` | 4 / 12 GB / 200 GB | узел «apps»: всё остальное | 7.03 GB (59 %) | 11.10 GB (93 %) | OpenProject CE |
+| `two-vps-split-b` | 4 / 15 GB / 210 GB | узел «apps»: Mattermost, OpenProject и остальные сервисы без GitLab/CI | 9.03 GB (60 %) | 15.10 GB (101 %) | OpenProject CE |
 
 `minimal-8` **не поддерживается**: GitLab на 8 GB выживает только с
 memory-constrained тюнингом и не оставляет места ни на что. Документированный
@@ -87,6 +89,9 @@ memory-constrained тюнингом и не оставляет места ни �
 ```
 
 Подробнее — [`for-humans/02-profiles.md`](for-humans/02-profiles.md).
+
+Обезличенные high-level и low-level шаблоны текущей архитектуры:
+[`for-humans/05-architecture-diagrams.md`](for-humans/05-architecture-diagrams.md).
 
 ## Куда идти дальше — четыре трека
 

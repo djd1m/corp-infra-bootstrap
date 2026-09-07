@@ -202,7 +202,7 @@
         "provider_hint": {
           "description": "Heuristic over DMI / cloud-init / hostname. Never a request to a metadata service.",
           "type": ["string", "null"],
-          "enum": ["adminvps-ru", "adminvps-kz", "yandex-kz", "generic", null]
+          "enum": ["adminvps-ru", "adminvps-eu", "adminvps-kz", "yandex-kz", "generic", null]
         }
       }
     },

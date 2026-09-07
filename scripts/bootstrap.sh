@@ -23,12 +23,13 @@ BS_STAGE=""
 BS_FROM=""
 BS_FORCE_PROFILE=0
 BS_PROVIDER=""
+BS_DOMAIN=""
 
 usage() {
     cat <<EOF
 Usage: bootstrap.sh [--check] [--yes] [--profile <name>] [--quiet]
                     [--stage <name>] [--from <name>] [--force-profile]
-                    [--provider <id>]
+                    [--provider <id>] [--domain <example.com>]
 
 Applies the five stages in the fixed order:
   ${STAGE_ORDER[*]}
@@ -44,6 +45,8 @@ Applies the five stages in the fixed order:
   --force-profile   proceed when sizing_verdict is inconclusive (INV-BS-2);
                     recorded in state.json as profile_forced
   --provider <id>   pass a provider override through to recon.sh
+  --domain <name>   corporate base domain; persisted in state.json and passed
+                    to the proxy and every business-service installer
   --quiet           log to file only; stdout is one result line
   --help / --version
 
@@ -83,6 +86,11 @@ ci_extra_arg() {
             BS_PROVIDER="$2"; CI_EXTRA_SHIFT=2
             ;;
         --provider=*)   BS_PROVIDER="${1#*=}"; CI_EXTRA_SHIFT=1 ;;
+        --domain)
+            [ "$#" -ge 2 ] || die 2 "--domain requires an argument"
+            BS_DOMAIN="$2"; CI_EXTRA_SHIFT=2
+            ;;
+        --domain=*)     BS_DOMAIN="${1#*=}"; CI_EXTRA_SHIFT=1 ;;
         *) return 1 ;;
     esac
     return 0
@@ -144,7 +152,7 @@ ent_infra_entries() {
         file="${PROFILE_JSON:-}"
     fi
     if [ -z "$file" ] || [ ! -r "$file" ]; then
-        printf 'install-gitlab.sh\ninstall-wiki.sh\ninstall-site.sh\ninstall-observability.sh\ninstall-tracker.sh\n'
+        printf 'install-gitlab.sh\ninstall-mattermost.sh\ninstall-wiki.sh\ninstall-site.sh\ninstall-observability.sh\ninstall-tracker.sh\n'
         return 0
     fi
     if command -v python3 >/dev/null 2>&1; then
@@ -156,7 +164,7 @@ for entry in data.get("services", []) or []:
     print("install-%s.sh" % entry["id"])
 ' "$file" 2>/dev/null && return 0
     fi
-    grep -o -E '"id"[[:space:]]*:[[:space:]]*"(gitlab|tracker|wiki|site|observability)"' "$file" \
+    grep -o -E '"id"[[:space:]]*:[[:space:]]*"(gitlab|mattermost|tracker|wiki|site|observability)"' "$file" \
         | sed -E 's/.*"([a-z]+)"$/install-\1.sh/'
     return 0
 }
@@ -271,6 +279,13 @@ run_recon_if_stale() {
             stale=0
         fi
     fi
+    # Recency alone is insufficient: profile budgets may have changed after
+    # the measurement. Never reuse a verdict computed from an older profile.
+    if [ -n "$CI_PROFILE" ] && [ -r "$BOOTSTRAP_DIR/profiles/$CI_PROFILE.json" ] \
+       && [ -r "$latest" ] && [ "$BOOTSTRAP_DIR/profiles/$CI_PROFILE.json" -nt "$latest" ]; then
+        log INFO "profile '$CI_PROFILE' is newer than recon data; refreshing sizing"
+        stale=1
+    fi
     if [ "$stale" -eq 0 ]; then
         log INFO "recon data is fresh (< 24h); reusing $latest"
         return 0
@@ -323,11 +338,24 @@ resolve_profile() {
 }
 
 init_state() {
+    if [ -n "$BS_DOMAIN" ]; then
+        if [[ ! "$BS_DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+            die 2 "--domain '$BS_DOMAIN' is not a valid lower-case DNS name"
+        fi
+        local existing_domain=""
+        existing_domain="$(state_get domain 2>/dev/null || true)"
+        if [ -n "$existing_domain" ] && [ "$existing_domain" != "$BS_DOMAIN" ]; then
+            die 2 "--domain '$BS_DOMAIN' contradicts immutable state.json domain '$existing_domain'"
+        fi
+    fi
     state_set schema_version 1 number
     state_set host_id "$(_ci_host_id)"
     state_set profile "$PROFILE_NAME"
     state_set profile_forced "${BS_PROFILE_FORCED:-false}" bool
     state_set node_role "$(profile_field node_role 2>/dev/null || printf 'single')"
+    if [ -n "$BS_DOMAIN" ]; then
+        state_set domain "$BS_DOMAIN"
+    fi
     state_set lib_version "$LIB_VERSION"
     state_set last_recon_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     local stage
@@ -396,9 +424,19 @@ stop_gate() {
     done
     printf '\n'
     log WARN "STOP gate reached: $title"
-    if confirm "confirm that the step above is done and continue?"; then
-        return 0
+    # This gate attests to work outside the automation boundary. `--yes` may
+    # approve ordinary mutations, but it cannot provide human evidence. Read
+    # from a real terminal and tolerate CRLF produced by Windows terminals.
+    if [ ! -t 0 ]; then
+        die 2 "STOP gate '$title' requires a human TTY; --yes cannot bypass it"
     fi
+    local answer=""
+    printf 'confirm that the step above is done and continue? [y/N]: '
+    IFS= read -r answer || answer=""
+    answer="${answer//$'\r'/}"
+    case "$answer" in
+        y|Y|yes|YES|Yes) return 0 ;;
+    esac
     die 1 "stopped at the gate '$title' by operator decision"
 }
 
@@ -427,9 +465,15 @@ run_stage() {
         if [ ! -x "$script" ]; then
             die 2 "stage '$stage': entry point $script is missing or not executable"
         fi
-        log INFO "running $script --yes --profile $PROFILE_NAME"
+        local args=(--yes --profile "$PROFILE_NAME") domain=""
+        if [ "$entry" = "install-proxy.sh" ] || [ "$stage" = "ent-infra" ]; then
+            domain="$(state_get domain 2>/dev/null || true)"
+            [ -n "$domain" ] || die 2 "stage '$stage' requires the corporate domain; rerun bootstrap with --domain <example.com>"
+            args+=(--domain "$domain")
+        fi
+        log INFO "running $script ${args[*]}"
         rc=0
-        "$script" --yes --profile "$PROFILE_NAME" || rc=$?
+        "$script" "${args[@]}" || rc=$?
         if [ "$rc" -ne 0 ]; then
             state_set "stages.$stage" failed
             log ERROR "stage '$stage': $entry exited $rc"
@@ -502,28 +546,42 @@ run_apply() {
 
         case "$stage" in
             security)
-                stop_gate "move the private age key into escrow" \
-                    "1. The private age key was printed once and was NOT written to the log." \
-                    "2. Store it in at least two independent places: the TEAM password" \
-                    "   manager safe (>= 2 holders) and one offline copy." \
-                    "3. Then run, on this host:" \
-                    "     $CI_ROOT/security/scripts/age-escrow.sh --attest <fingerprint>" \
-                    "   It asks you to retype the fingerprint FROM the escrow copy - that" \
-                    "   is what proves the copy exists and is readable."
+                if "$CI_ROOT/security/scripts/age-escrow.sh" --check --quiet >/dev/null 2>&1; then
+                    log INFO "escrow already live-verified; STOP gate is satisfied"
+                else
+                    stop_gate "move the private age key into escrow" \
+                        "1. The private age key was printed once and was NOT written to the log." \
+                        "2. Store it in at least two independent places: the TEAM password" \
+                        "   manager safe (>= 2 holders) and one offline copy." \
+                        "3. Then run, on this host:" \
+                        "     $CI_ROOT/security/scripts/age-escrow.sh --attest <fingerprint>" \
+                        "   It asks you to retype the fingerprint FROM the escrow copy - that" \
+                        "   is what proves the copy exists and is readable."
+                fi
                 require_stage "secrets.escrow.ok" \
                     "$CI_ROOT/security/scripts/age-escrow.sh" --check
                 ;;
             vpn-proxy)
-                stop_gate "switch your session onto the VPN" \
-                    "1. Import the peer config that install-wireguard.sh printed." \
-                    "2. Bring the tunnel up and confirm you can reach 10.8.0.1." \
-                    "3. Keep the current SSH session open until the new path works:" \
-                    "   the next stages narrow SSH down to the VPN subnet." \
-                    "4. Break-glass: a provider console or one whitelisted admin IP" \
-                    "   must exist before you continue."
+                if "$CI_ROOT/vpn-proxy/scripts/install-wireguard.sh" --check --quiet >/dev/null 2>&1; then
+                    log INFO "operator WireGuard connectivity was previously proven; STOP gate is satisfied"
+                else
+                    stop_gate "switch your session onto the VPN" \
+                        "1. Import the peer config that install-wireguard.sh printed." \
+                        "2. Bring the tunnel up and confirm you can reach 10.8.0.1." \
+                        "3. Keep the current SSH session open until the new path works:" \
+                        "   the next stages narrow SSH down to the VPN subnet." \
+                        "4. Break-glass: a provider console or one whitelisted admin IP" \
+                        "   must exist before you continue."
+                fi
                 ;;
         esac
     done
+
+    if [ -n "$BS_STAGE" ]; then
+        state_set last_check_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        log INFO "single-stage reconciliation complete; remaining stages keep their recorded states"
+        return 0
+    fi
 
     state_set current_stage "done"
     state_set last_check_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

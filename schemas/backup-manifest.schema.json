@@ -24,7 +24,7 @@
     "schema_version": { "type": "integer", "const": 1 },
     "service": {
       "type": "string",
-      "enum": ["gitlab", "tracker", "wiki", "site", "observability", "security", "vpn-proxy", "backup", "bootstrap", "pop-agents", "platform"]
+      "enum": ["gitlab", "mattermost", "tracker", "wiki", "site", "observability", "security", "vpn-proxy", "backup", "bootstrap", "pop-agents", "platform"]
     },
     "aggregate_version": { "type": "string", "minLength": 1 },
     "restore_priority": {
@@ -57,6 +57,15 @@
         "not": { "pattern": "(/root/\\.config/sops|keys\\.txt)" }
       },
       "minItems": 1
+    },
+    "optional_include": {
+      "description": "Absolute paths or globs backed up when present, but whose absence is valid for this deployment profile. C3 / INV-BK-5 applies identically.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^/",
+        "not": { "pattern": "(/root/\\.config/sops|keys\\.txt)" }
+      }
     },
     "exclude": { "type": "array", "items": { "type": "string", "pattern": "^/" } },
     "version_pin_required_for_restore": { "type": "boolean" },

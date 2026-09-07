@@ -6,8 +6,8 @@
 |---|---|---|
 | ОС | Ubuntu 22.04 / 24.04 или Debian 12 | RHEL-семейство — best-effort, apt-путь оттестирован |
 | vCPU | 8 (для `two-vps-split-b` — 4) | зависит от профиля |
-| RAM | 16 GB для `core-16`, 32 GB для `all-in-one-32` | 8 GB не поддерживается, см. [`02-profiles.md`](02-profiles.md) |
-| Диск | 350 GB SSD для `core-16` | считается с запасом 15 % |
+| RAM | 16 GB для `core-16` и `two-vps-split-b`, 32 GB для `all-in-one-32` | 8 GB не поддерживается, см. [`02-profiles.md`](02-profiles.md) |
+| Диск | 350 GB SSD для `core-16`, 210 GB для `two-vps-split-b` | считается с запасом 15 % |
 | Swap | выключен | защита от OOM — cgroup-слайсы и `systemd-oomd`, а не своп |
 | Доступ | root по SSH | плюс **обязательно** запасной путь: консоль провайдера или один whitelisted IP |
 | Домен | зона с доступом к DNS | нужна для сертификатов |
@@ -78,7 +78,7 @@ cd /opt/corp-infra/bootstrap
 ## Шаг 4. Запустить установку
 
 ```bash
-sudo ./scripts/bootstrap.sh --profile core-16
+sudo ./scripts/bootstrap.sh --profile core-16 --domain example.com
 ```
 
 Перед этим полезно посмотреть карту этапов — она тоже ничего не меняет:
@@ -126,8 +126,9 @@ sudo /opt/corp-infra/security/scripts/age-escrow.sh --attest <fingerprint>
 
 Поднимает WireGuard: подсеть `10.8.0.0/24`, порт `51820/udp`, MTU 1420,
 `AllowedIPs = 10.8.0.0/24` у клиента (split-tunnel). Выдаёт peer-конфиг
-оператора. Затем ставит два Caddy: публичный на `0.0.0.0:443` и внутренний,
-привязанный к адресу wg0 — **никогда** к `0.0.0.0`.
+оператора. Затем ставит два Caddy: публичный на явном адресе внешнего
+интерфейса и внутренний, привязанный к адресу wg0. Wildcard-bind здесь не
+используется: иначе оба listener'а конфликтуют на `443`.
 
 Web-UI для WireGuard не ставится ни на каком интерфейсе. Управление пирами —
 скриптом `wg-user add/revoke`, конфиги пиров хранятся в git через sops.
@@ -137,6 +138,14 @@ Web-UI для WireGuard не ставится ни на каком интерф�
 Установка останавливается. Нужно поднять туннель у себя, убедиться, что
 `10.8.0.1` отвечает, и **не закрывать текущую SSH-сессию**, пока новый путь не
 подтверждён. Дальше SSH сузится до подсети VPN.
+
+Конфигурация клиента действительно выдана только тогда, когда в терминале есть
+полный блок от `----- BEGIN peer operator -----` до
+`----- END peer operator -----`. Импортируйте в WireGuard содержимое между
+этими строками, не отправляя `PrivateKey` в чат или лог. Если установщик
+остановился до строки `BEGIN`, конфигурации ещё нет: не нажимайте Enter на
+STOP-гейте и не создавайте туннель из догадок — сначала устраните показанную
+ошибку и повторите идемпотентный запуск.
 
 ### Этап 3 — `backup`
 
@@ -160,7 +169,8 @@ systemd-таймеры с `Persistent=true` и `RandomizedDelaySec`.
 5. зарегистрировать vhost в `Caddyfile.d/`, проверить `caddy validate`,
    перезагрузить;
 6. опубликовать backup-манифест — единственный способ попасть в бэкап;
-7. **negative-check**: убедиться, что сервис НЕ отвечает с публичного адреса;
+7. проверить объявленный профилем контур: публичный бизнес-сервис отвечает по
+   валидному HTTPS, административный сервис НЕ отвечает с публичного адреса;
 8. записать маркер.
 
 ### Этап 5 — `pop-agents`
@@ -199,13 +209,13 @@ sudo ./scripts/state.sh show
 Продолжить с конкретного этапа:
 
 ```bash
-sudo ./scripts/bootstrap.sh --from backup --profile core-16
+sudo ./scripts/bootstrap.sh --from backup --profile core-16 --domain example.com
 ```
 
 Прогнать ровно один этап:
 
 ```bash
-sudo ./scripts/bootstrap.sh --stage ent-infra --profile core-16
+sudo ./scripts/bootstrap.sh --stage ent-infra --profile core-16 --domain example.com
 ```
 
 Логи — в `/var/log/corp-infra/<repo>/<script>.log`. Разбор типичных проблем —

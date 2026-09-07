@@ -7,7 +7,7 @@
 | `all-in-one-32` | 8 / 32 GB / 500 GB | всё, включая OpenProject | 19.28 GB (60 %) | 28.90 GB (90 %) | нет | OpenProject CE |
 | **`core-16`** (по умолчанию) | 8 / 16 GB / 350 GB | всё, кроме OpenProject; GitLab memory-constrained; observability lean | 11.08 GB (69 %) | 16.40 GB (102.5 %) | да, управляемый | GitLab issues/boards |
 | `two-vps-split-a` | 8 / 16 GB / 350 GB | узел «git»: GitLab + CI | 11.18 GB (70 %) | 16.23 GB (101 %) | минимальный | — |
-| `two-vps-split-b` | 4 / 12 GB / 200 GB | узел «apps»: всё остальное | 7.03 GB (59 %) | 11.10 GB (93 %) | нет | OpenProject CE |
+| `two-vps-split-b` | 4 / 15 GB / 210 GB | узел «apps»: Mattermost, OpenProject и остальные сервисы без GitLab/CI | 9.03 GB (60 %) | 15.10 GB (101 %) | да, управляемый | OpenProject CE |
 
 **steady** — потребление в покое и при типовой нагрузке. **cap** — жёсткий
 лимит (`mem_limit` в compose или `MemoryMax=` в systemd-слайсе), выше которого
@@ -97,9 +97,10 @@ GitLab, CI-джобы и бэкапа физически невозможен. �
 CI-раннера на уровне машины, а не контейнера. Суммарно 12 vCPU / 28 GB / 550 GB
 против 8 / 32 / 500 у `all-in-one-32`.
 
-Межузловая связность: оба VPS — пиры одного `wg0`. Каждый публикует свои сервисы
-своим `caddy-internal`. Кросс-проксирования нет: `gitlab.corp.<domain>` ведёт на
-`10.8.0.2`, остальные `*.corp.<domain>` — на `10.8.0.1`.
+Межузловая связность: оба VPS — пиры одного `wg0`. Административные сервисы
+публикуются через `caddy-internal`. На узле B Mattermost и OpenProject явно
+объявлены публичными и доступны как `chat.<domain>` и `projects.<domain>` через
+`caddy-public`; их базы данных всё равно остаются в изолированных Docker-сетях.
 
 ## Почему `minimal-8` не поддерживается
 

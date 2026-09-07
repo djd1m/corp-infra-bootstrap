@@ -32,7 +32,7 @@ corp-infra-bootstrap     ← вы здесь. Оркестрация, recon, п�
   │        age-ключ + sops, процедура escrow
   │
   ├─ 2. corp-infra-vpn-proxy    Сетевой периметр
-  │        WireGuard-хаб 10.8.0.0/24, caddy-public (0.0.0.0:443),
+  │        WireGuard-хаб, caddy-public (явный внешний адрес),
   │        caddy-internal (только на адресе wg0)
   │
   ├─ 3. corp-infra-backup       Долговечность
@@ -65,14 +65,13 @@ corp-infra-bootstrap     ← вы здесь. Оркестрация, recon, п�
 
 ```
 /opt/corp-infra/                 чекауты реп, root:root 0755
-├── bootstrap/                     каноникал lib/common.sh, recon.sh, profiles/
+├── bootstrap/                     каноникал lib/common.sh, recon.sh, profiles/, versions.env
 ├── security/                      harden.sh, age-escrow.sh, .sops.yaml
 ├── vpn-proxy/                     install-wireguard.sh, install-proxy.sh, Caddyfile.d/
 ├── backup/                        install-backup.sh, backup.sh, restore.sh, hooks/
 ├── ent-infra/                     compose/*.yml, observability/, hooks/
 ├── pop-agents/                    install-agent.sh, runbooks/
-├── wrappers/                      привилегированные обёртки opsagent
-└── versions.env                   пины версий шести реп
+└── wrappers/                      привилегированные обёртки opsagent
 
 /etc/corp-infra/                 runtime-конфиги из sops, каталог 0700
 └── <service>/.env                 0600, в .gitignore

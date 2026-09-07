@@ -27,6 +27,7 @@
         "proxy.ready",
         "backup.ready",
         "ent-infra.gitlab.installed",
+        "ent-infra.mattermost.installed",
         "ent-infra.tracker.installed",
         "ent-infra.wiki.installed",
         "ent-infra.site.installed",

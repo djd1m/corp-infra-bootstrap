@@ -22,7 +22,7 @@
   ],
   "properties": {
     "schema_version": { "type": "integer", "const": 1 },
-    "id": { "type": "string", "enum": ["adminvps-ru", "adminvps-kz", "yandex-kz", "generic"] },
+    "id": { "type": "string", "enum": ["adminvps-ru", "adminvps-eu", "adminvps-kz", "yandex-kz", "generic"] },
     "description": { "type": "string", "minLength": 1 },
     "vpn_hub_allowed": {
       "description": "false means install-wireguard.sh refuses hub_role=self with exit 1 (plan section 9.1).",

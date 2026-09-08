@@ -29,6 +29,11 @@ the finding can be incorporated into the canonical installation instructions.
   external channel credentials are configured and tested. It performs normal
   and deep acceptance checks and, when the optional secondary offsite is
   enabled, synchronizes the new snapshot there before the final backup check.
+- `complete-wiki-bootstrap.sh --install-private` verifies the reviewed
+  LinuxServer BookStack/MariaDB digest pins, creates the SOPS bundle, replaces
+  BookStack's vendor default administrator through the supported CLI, installs
+  the VPN-only vhost, and proves a fresh Yandex Cloud primary plus Cloud.ru
+  secondary backup. Existing credentials are reused on a resumed run.
 - `configure-dual-s3-backup.sh --iam-ready` creates the encrypted configuration
   for Yandex Cloud primary plus Cloud.ru secondary and invokes the canonical
   backup installer. It prompts for credentials on `/dev/tty`; do not paste them

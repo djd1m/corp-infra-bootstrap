@@ -628,3 +628,47 @@ the encrypted observability bundle already exists, it validates and reuses it
 without rotating or printing credentials. It reports success only after normal
 and deep checks, primary backup coverage, and a secondary sync when that target
 is enabled.
+
+## 2026-09-08 — BookStack VPN-only bootstrap
+
+The final live acceptance result was positive: BookStack and MariaDB were
+healthy on isolated Docker networks, the private endpoint returned the expected
+login redirect, the configured administrator had the admin system role, the
+vendor `admin@admin.com` account was absent, coverage was 6/6, snapshot
+`72014d62` was copied to Yandex Cloud, and the subsequent Cloud.ru secondary
+phase returned `OK`.
+
+Rakes found before that result and their necessary fixes:
+
+1. The documented `<version>` placeholder was not executable guidance. Exact
+   reviewed releases are BookStack `v26.05.3-ls278` and MariaDB
+   `11.8.8-r0-ls226`, pinned by their multi-platform OCI index digests.
+2. `awk ... {print; exit}` in a digest-inspection pipeline causes upstream
+   Docker Buildx to receive SIGPIPE. With `set -o pipefail` the helper exited
+   silently. The parser now records the first digest but consumes all input
+   before printing it in `END`.
+3. A Windows terminal paste can append invisible whitespace to an otherwise
+   valid email. The helper strips only outer whitespace before applying the
+   strict email validation; an existing Yandex address is valid and no private
+   mail server is required.
+4. BookStack ships `admin@admin.com` / `password`. A healthy container was not
+   sufficient acceptance. Apply now invokes the supported
+   `bookstack:create-admin --initial` command without putting its password in
+   argv, and check proves the configured email has `roles.system_name=admin`
+   while the vendor account count is zero.
+5. The old migration creates `roles.name`, but the live current schema has
+   renamed that field to `roles.system_name`. Acceptance follows the live
+   reviewed release schema and was tested against the running database.
+6. Current LinuxServer MariaDB accepts local root through its Unix socket; using
+   `-u root -p"$MYSQL_ROOT_PASSWORD"` returned `Access denied`. Read-only admin
+   proof and backup dump use the least-privileged application account from the
+   container environment. DR commands that need root use socket auth without a
+   password argument.
+7. An anonymous BookStack request returns `302` to the login route. The proxy
+   correctly accepted it, while the installer incorrectly demanded only `200`.
+   BookStack internal acceptance now allows exactly `200` or `302`; VPN-only
+   negative-public reachability remains mandatory.
+
+Canonical templates were updated only after the repaired installer produced a
+dump, published its manifest, completed the first primary snapshot and passed
+the independent Cloud.ru copy.

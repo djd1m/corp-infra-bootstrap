@@ -108,13 +108,20 @@ Three functions are worth knowing before you touch anything:
 bash -n scripts/*.sh lib/common.sh
 ./scripts/recon.sh --json | python3 -m json.tool
 ./scripts/sizing-check.sh --static --all
-./scripts/bootstrap.sh --check
-./scripts/doctor.sh
+sudo ./scripts/bootstrap.sh --check
+sudo ./scripts/doctor.sh
 ```
 
 All five must exit 0 on a correctly installed host. On a clean host the last two
 still exit 0, reporting five `pending` stages — that is the defined clean state,
 not a failure.
+
+On an installed host, the final two commands require `sudo` to read
+`/var/lib/corp-infra`. Without it, an unprivileged caller can mistake protected
+state for absent state.
+
+For a lost-host event, switch to the canonical all-service DRP in
+[`corp-infra-backup/for-ai-smart/03-disaster-recovery.md`](../../backup/for-ai-smart/03-disaster-recovery.md).
 
 ## When to stop and ask
 

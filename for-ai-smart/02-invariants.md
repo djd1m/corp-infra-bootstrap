@@ -11,7 +11,7 @@ Stage N+1 begins only when the marker of stage N reads `ok` **and** the
 producing repository's live `--check` exits 0.
 
 ```bash
-./scripts/bootstrap.sh --check
+sudo ./scripts/bootstrap.sh --check
 ```
 
 Proof: any row whose MARKER and LIVE CHECK columns disagree is printed as

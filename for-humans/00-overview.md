@@ -132,3 +132,4 @@ corp-infra-bootstrap     ← вы здесь. Оркестрация, recon, п�
 | Понять, какой профиль выбрать | [`02-profiles.md`](02-profiles.md) |
 | Разобраться, что показывает `state.sh show` | [`03-state-and-markers.md`](03-state-and-markers.md) |
 | Что-то пошло не так | [`04-troubleshooting.md`](04-troubleshooting.md) |
+| Восстановить потерянный VPS из backup | [`corp-infra-backup/for-humans/04-dr-runbook.md`](../../backup/for-humans/04-dr-runbook.md) |

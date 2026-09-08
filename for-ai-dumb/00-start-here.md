@@ -148,6 +148,9 @@ Read them in this order. Do not skip ahead.
 
 Go to [`01-recon.md`](01-recon.md) now.
 
+If the task is recovery of a lost VPS, **STOP this installation track** and use
+[`corp-infra-backup/for-ai-dumb/05-disaster-recovery.md`](../../backup/for-ai-dumb/05-disaster-recovery.md).
+
 ## What you must never do
 
 - Never run an outbound port scan (`nmap`, `masscan`, or any probe of a machine

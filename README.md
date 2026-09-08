@@ -92,6 +92,8 @@ memory-constrained тюнингом и не оставляет места ни �
 
 Обезличенные high-level и low-level шаблоны текущей архитектуры:
 [`for-humans/05-architecture-diagrams.md`](for-humans/05-architecture-diagrams.md).
+План восстановления всех сервисов на replacement VPS:
+[`corp-infra-backup/for-humans/04-dr-runbook.md`](../backup/for-humans/04-dr-runbook.md).
 
 ## Куда идти дальше — четыре трека
 
@@ -105,16 +107,18 @@ memory-constrained тюнингом и не оставляет места ни �
 ## Проверка «всё ли на месте»
 
 ```bash
-./scripts/doctor.sh
+sudo ./scripts/doctor.sh
 ```
 
 Запускает `recon.sh --check`, `sizing-check.sh --check`, `sync-lib.sh --check` и
 `bootstrap.sh --check`, печатает сводную таблицу. Ничего не меняет. Код выхода:
 0 — всё зелено, 1 — что-то провалено, 2 — что-то не удалось проверить.
+`sudo` здесь нужно только для чтения operational state под
+`/var/lib/corp-infra`, который на установленном хосте закрыт от обычного
+пользователя.
 
 ## Соседи
 
-- Умбрелла набора: [обзор шести реп и порядок этапов](../README.md).
 - Предыдущего этапа нет — этот репозиторий открывает цепочку.
 - Следующий этап: [`corp-infra-security`](../security/README.md) — базлайн хоста,
   ufw с цепочкой DOCKER-USER, секреты sops+age.

@@ -95,6 +95,6 @@ A wrong guess on this repository set damages a production host.
 bash -n scripts/*.sh lib/common.sh          # syntax
 ./scripts/recon.sh --json | python3 -m json.tool   # facts, zero writes
 ./scripts/sizing-check.sh --static --all    # gates G1-G4 over every profile
-./scripts/bootstrap.sh --check              # stage map
-./scripts/doctor.sh                         # all of the above, aggregated
+sudo ./scripts/bootstrap.sh --check         # stage map; operational state is root-readable
+sudo ./scripts/doctor.sh                    # all of the above, aggregated
 ```

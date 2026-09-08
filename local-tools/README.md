@@ -23,6 +23,12 @@ the finding can be incorporated into the canonical installation instructions.
   Mattermost/OpenProject configs, shows generated administrator passwords once
   on the operator TTY for KeePassXC, installs both public services and requires
   their first service-scoped backups before reporting success.
+- `complete-observability-bootstrap.sh --install-disabled` creates a
+  SOPS-encrypted Grafana credential, installs the full observability stack and
+  intentionally keeps Telegram/SMTP/webhook delivery disabled until real
+  external channel credentials are configured and tested. It performs normal
+  and deep acceptance checks and, when the optional secondary offsite is
+  enabled, synchronizes the new snapshot there before the final backup check.
 - `configure-dual-s3-backup.sh --iam-ready` creates the encrypted configuration
   for Yandex Cloud primary plus Cloud.ru secondary and invokes the canonical
   backup installer. It prompts for credentials on `/dev/tty`; do not paste them

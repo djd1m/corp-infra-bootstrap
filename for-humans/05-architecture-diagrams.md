@@ -18,18 +18,18 @@ flowchart LR
     employee --> internet
     operator -->|VPN-туннель| app_vps
 
-    subgraph app_vps[VPS A — приложения и периметр]
+    subgraph app_vps[Application VPS — профиль two-vps-split-b]
         public_proxy[Public reverse proxy<br/>PUBLIC_HOST_IP]
         internal_proxy[Internal reverse proxy<br/>VPN_HUB_IP]
         mattermost[Mattermost]
         openproject[OpenProject]
-        grafana[Grafana и админ-сервисы]
+        observability[Grafana / Prometheus / Loki / Alertmanager]
         app_data[(Базы приложений)]
         local_backup[(Локальная backup-копия)]
 
         public_proxy --> mattermost
         public_proxy --> openproject
-        internal_proxy --> grafana
+        internal_proxy --> observability
         mattermost --> app_data
         openproject --> app_data
         app_data --> local_backup
@@ -37,7 +37,7 @@ flowchart LR
 
     internet -->|HTTPS: PUBLIC_DOMAIN| public_proxy
 
-    subgraph git_vps[VPS B — Git-платформа]
+    subgraph git_vps[GitLab VPS — профиль two-vps-split-a]
         gitlab[GitLab CE]
         runner[Runner]
         git_data[(Git-данные)]
@@ -54,16 +54,17 @@ flowchart LR
 
 Основное правило: Mattermost и OpenProject — явно публичные бизнес-сервисы;
 Grafana и административные поверхности доступны только по приватному пути.
-Git-платформа находится на отдельном сервере и не устанавливается на VPS A.
+Git-платформа находится на отдельном сервере и не устанавливается на
+application VPS.
 
-## Low-level: сетевые пути внутри VPS A
+## Low-level: сетевые пути внутри application VPS
 
 ```mermaid
 flowchart TB
     public_client[Публичный клиент]
     vpn_client[VPN-клиент]
 
-    subgraph host[VPS A]
+    subgraph host[Application VPS — two-vps-split-b]
         ext_if[Внешний интерфейс<br/>PUBLIC_HOST_IP]
         wg_if[WireGuard-интерфейс<br/>VPN_HUB_IP]
         firewall[Host firewall<br/>default deny]
@@ -78,13 +79,18 @@ flowchart TB
             op_web[OpenProject web]
         end
         subgraph admin_front[Internal proxy network]
-            admin_web[Grafana / admin endpoints]
+            grafana[Grafana]
+            prometheus[Prometheus]
+            alertmanager[Alertmanager<br/>external delivery disabled initially]
+            loki_api[Loki API]
         end
 
         subgraph private_data[Backend networks — internal only]
             mm_db[(Mattermost DB)]
             op_db[(OpenProject DB/cache)]
-            metrics[(Metrics and logs)]
+            exporters[node_exporter / cAdvisor / blackbox]
+            alloy[Alloy]
+            metrics[(Prometheus TSDB / Loki chunks)]
         end
 
         local_restic[(Local restic repository)]
@@ -93,10 +99,19 @@ flowchart TB
         wg_if --> firewall --> internal_caddy
         public_caddy -->|отдельное ACL-подключение| mm_web
         public_caddy -->|отдельное ACL-подключение| op_web
-        internal_caddy --> admin_web
+        internal_caddy --> grafana
+        internal_caddy --> prometheus
+        internal_caddy --> alertmanager
+        internal_caddy --> loki_api
         mm_web --> mm_db
         op_web --> op_db
-        admin_web --> metrics
+        exporters --> prometheus
+        alloy --> loki_api
+        prometheus --> metrics
+        loki_api --> metrics
+        grafana --> prometheus
+        grafana --> loki_api
+        grafana --> alertmanager
         mm_db -. pg_dump .-> local_restic
         op_db -. pg_dump .-> local_restic
     end
@@ -120,4 +135,5 @@ flowchart TB
 - backup вводится до появления данных приложений;
 - primary и secondary backup находятся у разных S3-провайдеров, имеют разные
   ключи, versioning и отдельные расписания;
-- GitLab относится к VPS B и пропускается при установке VPS A.
+- GitLab относится к `two-vps-split-a` и пропускается при установке
+  application VPS с профилем `two-vps-split-b`.

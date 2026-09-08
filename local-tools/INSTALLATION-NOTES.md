@@ -563,3 +563,68 @@ did not authenticate `git ls-remote`.
 - Documentation improvement: release preparation should verify that every
   version in `versions.env` exists remotely before the quick start is given to
   an operator.
+
+## 2026-09-08 — observability `full` on `two-vps-split-b`
+
+The final live acceptance result was positive: all eight containers healthy,
+Prometheus 11/11 targets up, five Grafana dashboards provisioned, Loki
+push/query round-trip green, four VPN-only vhosts unreachable through the
+public address, backup coverage 5/5, and fresh immutable copies sent to the
+Yandex Cloud primary and Cloud.ru secondary repositories.
+
+Rakes found before that result and their necessary fixes:
+
+1. `gcr.io/cadvisor/cadvisor:v0.53.0` does not exist. cAdvisor moved release
+   `v0.53.0` and newer to `ghcr.io/google/cadvisor`; verify exact manifests
+   before starting Compose so one missing image does not interrupt every pull.
+2. OCI cannot create a nested bind mount below the read-only
+   `/etc/prometheus` bind. Dynamic file-SD targets now mount separately at
+   `/etc/corp-targets`.
+3. Prometheus 3.5 rejects `source_labels` on a `labeldrop` action. The supported
+   form is `regex: <label-name>` plus `action: labeldrop`.
+4. The upstream Alloy image is distroless and has no `wget`/`curl`. Its Docker
+   healthcheck uses `/bin/alloy validate`, while the HTTP server explicitly
+   listens on `0.0.0.0:12345` so Prometheus can scrape it across the bridge.
+5. A previously created target directory was `0750 root:root`; Prometheus runs
+   as uid 65534 and could not traverse it. Reconcile repairs the directory to
+   `0755`, not only on first creation.
+6. Reusing service id `observability` for four hostnames overwrote one Caddy
+   fragment four times. Each endpoint now has a distinct id:
+   `observability-{grafana,prometheus,alerts,logs}`; the old single fragment is
+   removed through the registration ACL.
+7. Grafana API checks assumed username `admin`, although the bootstrap permits
+   a different administrator name. Checks now read both username and password
+   from the 0600 runtime env.
+8. Static Caddy scrape targets were unreachable by design: the internal admin
+   API is loopback-only and the public admin API is disabled. They were removed
+   instead of permanently weakening the 95% target-health gate.
+9. Static blackbox targets named services that were not installed in this
+   profile, including GitLab on the other VPS. Targets are now rendered only
+   for installed public service markers.
+10. VPN-only Caddy cannot complete public HTTP-01, and repeated attempts caused
+    ACME authorization errors. Internal fragments now use `tls internal` unless
+    an explicit DNS-01 provider is configured; public vhosts keep HTTP-01.
+11. Shell command substitution strips trailing newlines. The TLS fragment
+    renderer failed because `tls internal` was joined to `reverse_proxy`; the
+    renderer, not the producer, now restores exactly one newline.
+12. Grafana's unauthenticated root returns `302` to the login page, not `200`.
+    The observability acceptance check expects that exact healthy response.
+13. Prometheus retained removed scrape jobs until reload. Apply now calls its
+    lifecycle reload endpoint before measuring the target-up percentage.
+14. Loki accepted the probe but the old instant-query did not reliably return
+    it. Deep-check now writes a unique nanosecond marker and queries an explicit
+    bounded interval with `query_range`; plain `--check` remains read-only.
+15. Newly created private A records were immediately correct at the
+    authoritative servers but recursive resolvers briefly disagreed because of
+    negative caching. Name validation now tries three read-only lookups, still
+    failing immediately on any concrete address outside the VPN subnet.
+16. External notification credentials were intentionally unavailable at first
+    deployment. `ALERT_DELIVERY_MODE=disabled` renders a no-op receiver while
+    keeping Alertmanager and alert visibility healthy; external delivery can
+    be enabled later as a separate tested change.
+
+The bootstrap helper is safe to resume after an interrupted image pull: when
+the encrypted observability bundle already exists, it validates and reuses it
+without rotating or printing credentials. It reports success only after normal
+and deep checks, primary backup coverage, and a secondary sync when that target
+is enabled.

@@ -77,6 +77,9 @@ sudo /opt/corp-infra/bootstrap/scripts/bootstrap.sh --profile core-16 \
 | `two-vps-split-a` | 8 / 16 GB / 350 GB | узел «git»: GitLab и CI | 11.18 GB (70 %) | 16.23 GB (101 %) | — |
 | `two-vps-split-b` | 4 / 15 GB / 210 GB | узел «apps»: Mattermost, OpenProject и остальные сервисы без GitLab/CI | 9.03 GB (60 %) | 15.10 GB (101 %) | OpenProject CE |
 
+В текущем `two-vps-split-b` корпоративный сайт временно помечен `external` и
+остаётся на существующем внешнем хостинге; этот VPS его не публикует.
+
 `minimal-8` **не поддерживается**: GitLab на 8 GB выживает только с
 memory-constrained тюнингом и не оставляет места ни на что. Документированный
 путь для 8 GB — Gitea/Forgejo вместо GitLab, но это другой продукт и другое

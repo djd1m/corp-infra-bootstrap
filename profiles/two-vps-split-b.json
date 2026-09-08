@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "two-vps-split-b",
   "default": false,
-  "description": "Node B of the two-VPS split: public Mattermost and OpenProject, wiki, site and full observability. GitLab and CI live on node A. Holds the WireGuard admin hub and both Caddy instances.",
+  "description": "Node B of the two-VPS split: public Mattermost and OpenProject, VPN-only wiki and full observability. The corporate site remains external temporarily; GitLab and CI live on node A. Holds the WireGuard admin hub and both Caddy instances.",
   "node_role": "apps",
   "min_vcpu": 4,
   "min_ram_mb": 15360,
@@ -13,7 +13,7 @@
     {"id": "tracker", "variant": "openproject", "steady_mb": 4096, "cap_mb": 5120, "disk_gb": 30, "adr": "ADR-009", "opts": {"exposure": "public", "hostname": "projects"}},
     {"id": "mattermost", "variant": "team-edition", "steady_mb": 2048, "cap_mb": 4096, "disk_gb": 20, "adr": "ADR-014", "opts": {"exposure": "public", "hostname": "chat"}},
     {"id": "wiki", "variant": "bookstack", "steady_mb": 819, "cap_mb": 1024, "disk_gb": 10, "adr": "ADR-010"},
-    {"id": "site", "variant": "hugo-static", "steady_mb": 0, "cap_mb": 0, "disk_gb": 1, "adr": "ADR-010"},
+    {"id": "site", "variant": "external", "steady_mb": 0, "cap_mb": 0, "disk_gb": 0, "adr": "ADR-010"},
     {"id": "observability", "variant": "full", "steady_mb": 1536, "cap_mb": 2560, "disk_gb": 45, "adr": "ADR-011", "opts": {"prom_retention": "90d", "prom_retention_size": "25GB", "loki_retention": "720h", "blackbox": true, "scrapes_both_nodes": true}}
   ],
   "platform": [

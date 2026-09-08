@@ -14,6 +14,7 @@ flowchart LR
     employee[Сотрудники<br/>обычный браузер]
     operator[Оператор<br/>WireGuard-клиент]
     internet((Интернет))
+    external_site[Корпоративный сайт<br/>внешний хостинг, временно]
 
     employee --> internet
     operator -->|VPN-туннель| app_vps
@@ -23,19 +24,23 @@ flowchart LR
         internal_proxy[Internal reverse proxy<br/>VPN_HUB_IP]
         mattermost[Mattermost]
         openproject[OpenProject]
+        bookstack[BookStack wiki]
         observability[Grafana / Prometheus / Loki / Alertmanager]
         app_data[(Базы приложений)]
         local_backup[(Локальная backup-копия)]
 
         public_proxy --> mattermost
         public_proxy --> openproject
+        internal_proxy --> bookstack
         internal_proxy --> observability
         mattermost --> app_data
         openproject --> app_data
+        bookstack --> app_data
         app_data --> local_backup
     end
 
     internet -->|HTTPS: PUBLIC_DOMAIN| public_proxy
+    internet -->|основной сайт| external_site
 
     subgraph git_vps[GitLab VPS — профиль two-vps-split-a]
         gitlab[GitLab CE]
@@ -53,9 +58,10 @@ flowchart LR
 ```
 
 Основное правило: Mattermost и OpenProject — явно публичные бизнес-сервисы;
-Grafana и административные поверхности доступны только по приватному пути.
-Git-платформа находится на отдельном сервере и не устанавливается на
-application VPS.
+BookStack, Grafana и административные поверхности доступны только по приватному
+пути. Корпоративный сайт временно остаётся на внешнем хостинге (`site:
+external`) и не устанавливается на application VPS. Git-платформа находится на
+отдельном сервере и также не устанавливается на application VPS.
 
 ## Low-level: сетевые пути внутри application VPS
 
@@ -79,6 +85,7 @@ flowchart TB
             op_web[OpenProject web]
         end
         subgraph admin_front[Internal proxy network]
+            bookstack[BookStack]
             grafana[Grafana]
             prometheus[Prometheus]
             alertmanager[Alertmanager<br/>external delivery disabled initially]
@@ -88,6 +95,7 @@ flowchart TB
         subgraph private_data[Backend networks — internal only]
             mm_db[(Mattermost DB)]
             op_db[(OpenProject DB/cache)]
+            wiki_db[(BookStack MariaDB)]
             exporters[node_exporter / cAdvisor / blackbox]
             alloy[Alloy]
             metrics[(Prometheus TSDB / Loki chunks)]
@@ -99,12 +107,14 @@ flowchart TB
         wg_if --> firewall --> internal_caddy
         public_caddy -->|отдельное ACL-подключение| mm_web
         public_caddy -->|отдельное ACL-подключение| op_web
+        internal_caddy --> bookstack
         internal_caddy --> grafana
         internal_caddy --> prometheus
         internal_caddy --> alertmanager
         internal_caddy --> loki_api
         mm_web --> mm_db
         op_web --> op_db
+        bookstack --> wiki_db
         exporters --> prometheus
         alloy --> loki_api
         prometheus --> metrics
@@ -114,6 +124,7 @@ flowchart TB
         grafana --> alertmanager
         mm_db -. pg_dump .-> local_restic
         op_db -. pg_dump .-> local_restic
+        wiki_db -. mariadb-dump .-> local_restic
     end
 
     primary_s3[(Primary S3<br/>versioning + no-delete key)]
@@ -137,3 +148,5 @@ flowchart TB
   ключи, versioning и отдельные расписания;
 - GitLab относится к `two-vps-split-a` и пропускается при установке
   application VPS с профилем `two-vps-split-b`.
+- site имеет вариант `external`, не получает vhost/контейнер/marker на этом VPS
+  и вернётся в профиль только отдельным изменением после готовности DNS.

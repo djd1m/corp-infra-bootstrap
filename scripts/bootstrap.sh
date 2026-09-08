@@ -139,6 +139,10 @@ stage_marker() {
 stage_check_cmd() {
     local stage="$1" repo entry
     repo="$(stage_repo "$stage")" || return 1
+    if [ "$stage" = "ent-infra" ]; then
+        printf '%s/%s/scripts/check-all.sh\n' "$CI_ROOT" "$repo"
+        return 0
+    fi
     entry="$(stage_entries "$stage" | head -n1)"
     printf '%s/%s/scripts/%s\n' "$CI_ROOT" "$repo" "$entry"
 }

@@ -672,3 +672,25 @@ Rakes found before that result and their necessary fixes:
 Canonical templates were updated only after the repaired installer produced a
 dump, published its manifest, completed the first primary snapshot and passed
 the independent Cloud.ru copy.
+
+## 2026-09-08 — site temporarily external on apps node
+
+- Read-only precheck proved that the apex corporate domain still resolves to a
+  different host and the `www` name is absent. Publishing Hugo here would have
+  changed ownership of an existing public surface and ACME could not succeed.
+- Operator decision: keep the site outside this VPS for now and return to it
+  later. `two-vps-split-b` therefore uses `site.variant=external` with zero
+  local RAM/disk budget.
+- This is a first-class profile decision, not a skipped failing step:
+  `install-site.sh --check` exits 0 without a container, vhost, manifest or
+  marker; backup coverage remains the six locally managed aggregates.
+- Return gate: confirm content ownership and both apex/`www` DNS, change the
+  variant back to `hugo-static`, rerun G1-G4, then follow the normal precheck →
+  build → public TLS → acceptance sequence.
+- The bootstrap stage map exposed a separate orchestration bug during this
+  change: its ent-infra live proof selected the first generic installer
+  (`install-gitlab.sh`) instead of checking the active profile. This produced a
+  false `DRIFT` on the apps node although every installed service was green.
+  Ent-infra now owns a read-only `check-all.sh` which enumerates the profile;
+  bootstrap uses that aggregate for stage checks and prerequisite proof. Live
+  result after the fix: `ent-infra ok / ok / ok`, `bootstrap: OK`.

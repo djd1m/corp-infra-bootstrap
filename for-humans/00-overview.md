@@ -133,3 +133,8 @@ corp-infra-bootstrap     ← вы здесь. Оркестрация, recon, п�
 | Разобраться, что показывает `state.sh show` | [`03-state-and-markers.md`](03-state-and-markers.md) |
 | Что-то пошло не так | [`04-troubleshooting.md`](04-troubleshooting.md) |
 | Восстановить потерянный VPS из backup | [corp-infra-backup/for-humans/04-dr-runbook.md](https://github.com/djd1m/corp-infra-backup/blob/main/for-humans/04-dr-runbook.md) |
+
+## Аудит установленного узла B
+
+[Состояние, открытые пункты и порядок завершения приёмки](06-node-b-readiness.md)
+— проверка от 2026-09-09.

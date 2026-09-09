@@ -120,7 +120,7 @@ grep -rnE '\b(nmap|masscan|zmap|hping|--external-probe)\b' scripts/ lib/
 
 Proof: no output. Port facts come from `ss -Hln` with a `/proc/net/{tcp,udp}`
 fallback — local listeners only. Forbidden by the adminVPS offer; see
-`../../../research/08-vps-providers.md` section A5.
+[the provider policy catalog](../providers/README.md).
 
 ### No metadata-service calls in recon
 

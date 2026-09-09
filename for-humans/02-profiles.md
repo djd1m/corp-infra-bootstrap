@@ -168,7 +168,7 @@ Security применяет общий пул, pop-agents — размещени
 Обычная SSH-оболочка и произвольные команды от UID opsagent не переводятся
 в этот пул автоматически. Ограниченный вход — `corp-agent-session`; он
 проверяет настоящую cgroup перед запуском CLI. Подробные команды и проверка
-размещения: [pop-agents](../../pop-agents/for-humans/).
+размещения: [pop-agents](https://github.com/djd1m/corp-infra-pop-agents/tree/main/for-humans).
 
 ## Единственный источник лимита backup
 

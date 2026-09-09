@@ -697,7 +697,7 @@ the independent Cloud.ru copy.
 
 ## 2026-09-09 — memory policy gaps resolved with live proof
 
-- Security now owns a dedicated `scripts/reconcile-memory.sh` check/apply path
+- Security now owns a dedicated `/opt/corp-infra/security/scripts/reconcile-memory.sh` check/apply path
   and the persistent corp parent/core/ci/agent units. Its live check is part
   of `harden.sh --check`, so a healthy marker cannot conceal missing limits.
 - On dz-ent-01 (`two-vps-split-b`), core MemoryMax is 14029M; core and parent

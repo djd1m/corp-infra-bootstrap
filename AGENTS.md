@@ -63,8 +63,8 @@ Humans read `for-humans/` (Russian).
    vendored copy is caught by gate G-09.
 4. **Never run an outbound port scan.** No `nmap`, no `masscan`, no probing of a
    host you do not own. Port facts come from local listeners only (`ss -Hln`).
-   The adminVPS offer forbids scanning outright; see
-   `../../research/08-vps-providers.md` section A5.
+   The checked-in adminVPS policy forbids scanning; see
+   [the provider policy catalog](providers/README.md).
 5. **A marker is a claim, not a proof.** Never accept
    `/var/lib/corp-infra/markers/<stage>.json` on its own. Use `require_stage`,
    which additionally runs the producing repository's live `--check`

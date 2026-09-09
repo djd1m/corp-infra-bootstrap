@@ -96,7 +96,7 @@ memory-constrained тюнингом и не оставляет места ни �
 Обезличенные high-level и low-level шаблоны текущей архитектуры:
 [`for-humans/05-architecture-diagrams.md`](for-humans/05-architecture-diagrams.md).
 План восстановления всех сервисов на replacement VPS:
-[`corp-infra-backup/for-humans/04-dr-runbook.md`](../backup/for-humans/04-dr-runbook.md).
+[corp-infra-backup/for-humans/04-dr-runbook.md](https://github.com/djd1m/corp-infra-backup/blob/main/for-humans/04-dr-runbook.md).
 
 ## Куда идти дальше — четыре трека
 
@@ -123,7 +123,7 @@ sudo ./scripts/doctor.sh
 ## Соседи
 
 - Предыдущего этапа нет — этот репозиторий открывает цепочку.
-- Следующий этап: [`corp-infra-security`](../security/README.md) — базлайн хоста,
+- Следующий этап: [corp-infra-security](https://github.com/djd1m/corp-infra-security/blob/main/README.md) — базлайн хоста,
   ufw с цепочкой DOCKER-USER, секреты sops+age.
 
 Версия репозитория: `1.0.0`. Библиотека: `lib/VERSION` — канонический экземпляр,

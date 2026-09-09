@@ -149,7 +149,7 @@ Read them in this order. Do not skip ahead.
 Go to [`01-recon.md`](01-recon.md) now.
 
 If the task is recovery of a lost VPS, **STOP this installation track** and use
-[`corp-infra-backup/for-ai-dumb/05-disaster-recovery.md`](../../backup/for-ai-dumb/05-disaster-recovery.md).
+[corp-infra-backup/for-ai-dumb/05-disaster-recovery.md](https://github.com/djd1m/corp-infra-backup/blob/main/for-ai-dumb/05-disaster-recovery.md).
 
 ## What you must never do
 

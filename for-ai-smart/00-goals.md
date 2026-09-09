@@ -62,7 +62,7 @@ Two global invariants also bind everything here:
 
 | Never | Why |
 |---|---|
-| Run an outbound port scan, or probe a host you do not own | The adminVPS offer forbids it outright (`../../../research/08-vps-providers.md` section A5). Port facts come from local listeners only. |
+| Run an outbound port scan, or probe a host you do not own | The checked-in adminVPS policy forbids it; see [the provider policy catalog](../providers/README.md). Port facts come from local listeners only. |
 | Query a cloud metadata service to identify the provider | `provider_hint` is a local heuristic over DMI, cloud-init and the hostname. A network call here would make recon non-hermetic. |
 | Mutate anything in `--check` mode, including creating a directory | `--check` is the doctor mode the whole repo set relies on. If it can change state, it is not a doctor. |
 | Edit a vendored `lib/common.sh` | Gate G-09 catches it. Change the canonical copy, bump `lib/VERSION`, run `sync-lib.sh`. |
@@ -121,7 +121,7 @@ On an installed host, the final two commands require `sudo` to read
 state for absent state.
 
 For a lost-host event, switch to the canonical all-service DRP in
-[`corp-infra-backup/for-ai-smart/03-disaster-recovery.md`](../../backup/for-ai-smart/03-disaster-recovery.md).
+[corp-infra-backup/for-ai-smart/03-disaster-recovery.md](https://github.com/djd1m/corp-infra-backup/blob/main/for-ai-smart/03-disaster-recovery.md).
 
 ## When to stop and ask
 

@@ -97,7 +97,7 @@
       "properties": {
         "corp-core": { "$ref": "#/$defs/slice" },
         "corp-ci": { "$ref": "#/$defs/slice" },
-        "corp-backup": { "$ref": "#/$defs/slice" },
+        "corp-backup": { "$ref": "#/$defs/backup_slice" },
         "corp-agent": { "$ref": "#/$defs/slice" }
       }
     },
@@ -146,6 +146,16 @@
         "MemoryLow": { "type": "string" },
         "MemoryHigh": { "type": "string" },
         "MemoryMax": { "type": "string" }
+      }
+    },
+    "backup_slice": {
+      "description": "Backup throttling policy. Its hard cap is canonically platform[id=backup].cap_mb, not a second slice value.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["MemoryLow", "MemoryHigh"],
+      "properties": {
+        "MemoryLow": { "type": "string" },
+        "MemoryHigh": { "type": "string" }
       }
     }
   }

@@ -228,3 +228,12 @@ sudo /opt/corp-infra/pop-agents/scripts/reconcile-agent-memory.sh --check --quie
 The split-b G2 sum is exactly 16896 MiB = 110% of minimum RAM. Do not add
 agent capacity without re-evaluating the complete profile. Publish only after
 live placement, idempotence and offsite scratch-restore proof.
+
+### Backup hard cap has one source
+
+Use `platform[id=backup].cap_mb` for the backup hard cap. The backup slice
+section supplies only MemoryLow and MemoryHigh; the schema rejects a duplicate
+MemoryMax. All four profiles currently specify 819 MiB. The backup-owned
+`reconcile-backup-slice.sh --check` verifies exact persistent/systemd/native
+values; a finite but different cap is drift. Its apply refuses live backup
+work and leaves timer calendars and service lifecycles unchanged.

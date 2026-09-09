@@ -26,7 +26,7 @@
   "slices": {
     "corp-core": {"MemoryLow": "9246M", "MemoryHigh": "infinity", "MemoryMax": "14029M"},
     "corp-ci": {"MemoryLow": "0", "MemoryHigh": "1.2G", "MemoryMax": "1.5G"},
-    "corp-backup": {"MemoryLow": "0", "MemoryHigh": "600M", "MemoryMax": "800M"},
+    "corp-backup": {"MemoryLow": "0", "MemoryHigh": "600M"},
     "corp-agent": {"MemoryLow": "0", "MemoryHigh": "1600M", "MemoryMax": "2048M"}
   },
   "offsite": {

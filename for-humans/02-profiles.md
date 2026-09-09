@@ -67,7 +67,7 @@ GitLab, CI-джобы и бэкапа физически невозможен. �
 |---|---|---|---|---|
 | `corp-core` | Caddy ×2, GitLab, observability, BookStack | — | = Σ cap ядра | защищён, `systemd-oomd` его не трогает |
 | `corp-ci` | gitlab-runner и job-контейнеры | 1.2 GB | 1.5 GB | **первая жертва**, `ManagedOOMMemoryPressure=kill` |
-| `corp-backup` | restic, quiesce-хуки, дампы | 0.6 GB | 0.8 GB | окно 03:00–05:00, после дренажа CI |
+| `corp-backup` | restic, quiesce-хуки, дампы | 600 MiB | 819 MiB | отдельное расписание backup |
 | `corp-agent` | поддерживаемые сессии opsagent и служебные обработчики | 400 MiB | 614 MiB | допустимая цель oomd |
 
 Кому overcommit неприемлем — `two-vps-split` или `all-in-one-32`.
@@ -169,3 +169,11 @@ Security применяет общий пул, pop-agents — размещени
 в этот пул автоматически. Ограниченный вход — `corp-agent-session`; он
 проверяет настоящую cgroup перед запуском CLI. Подробные команды и проверка
 размещения: [pop-agents](../../pop-agents/for-humans/).
+
+## Единственный источник лимита backup
+
+Жёсткий предел задаёт `platform[id=backup].cap_mb` (819 MiB во всех четырёх
+профилях). Раздел `slices.corp-backup` содержит только `MemoryLow` и
+`MemoryHigh`; схема запрещает дублирующий `MemoryMax`. Backup применяет
+значения своим reconciler и сверяет их с systemd и cgroup. Простого наличия
+конечного лимита недостаточно: 800 MiB также считается расхождением.

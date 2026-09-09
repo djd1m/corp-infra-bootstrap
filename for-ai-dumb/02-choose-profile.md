@@ -200,3 +200,14 @@ Expected: all profiles PASS, then `OK: reconcile-memory.sh` and
 `OK: reconcile-agent-memory.sh`. If any command exits 1 or 2, STOP and report
 its output. An SSH shell alone does not prove placement; use the supported
 `corp-agent-session` entry point documented in pop-agents.
+
+## Verify the backup allocation
+
+The hard cap is `platform[id=backup].cap_mb`, currently 819 MiB. Do not add
+MemoryMax to `slices.corp-backup`; the schema deliberately forbids the duplicate.
+
+```bash
+sudo /opt/corp-infra/backup/scripts/reconcile-backup-slice.sh --check --quiet
+```
+
+Expected: `OK: reconcile-backup-slice.sh`. On exit 1 or 2 STOP and report.

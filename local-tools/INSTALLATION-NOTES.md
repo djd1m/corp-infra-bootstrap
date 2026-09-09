@@ -694,3 +694,31 @@ the independent Cloud.ru copy.
   Ent-infra now owns a read-only `check-all.sh` which enumerates the profile;
   bootstrap uses that aggregate for stage checks and prerequisite proof. Live
   result after the fix: `ent-infra ok / ok / ok`, `bootstrap: OK`.
+
+## 2026-09-09 — memory policy gaps resolved with live proof
+
+- Security now owns a dedicated `scripts/reconcile-memory.sh` check/apply path
+  and the persistent corp parent/core/ci/agent units. Its live check is part
+  of `harden.sh --check`, so a healthy marker cannot conceal missing limits.
+- On dz-ent-01 (`two-vps-split-b`), core MemoryMax is 14029M; core and parent
+  MemoryLow are 9246M. The exact kernel values were verified without restarting
+  any of 19 containers. Guarded daemon-reload applies live resource controls.
+- Installed systemd-oomd 255.4-1ubuntu8.17 with runtime service/socket masks
+  during package configuration and an explicit user@ override before startup.
+  Only CI/agent pressure domains opt in at 60%; core and its ancestors are not
+  kill domains. CI/agent are currently empty/inactive, so oomctl has no
+  monitored production cgroups until workloads explicitly enter them.
+- The daemon killed only a bounded file-backed synthetic workload; kernel and
+  core OOM counters stayed 0. A pure anonymous/no-swap probe had high PSI but
+  no pgscan and did not trigger: systemd 255 requires recent reclaim activity.
+- A repeated apply preserved all 8 file hashes/mtimes and daemon PID/starttime.
+  Platform snapshot 2026-09-09T12:39:53Z reached offsite; all 8 policy files
+  restored to scratch with identical bytes/modes. No speculative template
+  changes were published before installation, repeat and restore proof.
+- Human high/low-level architecture and flow diagrams plus smart/dumb tracks
+  live in security's memory-policy docs. Backup owns the exact optional
+  platform includes and DR instructions. Full replacement-host rebuild and
+  a reboot were not part of this proof.
+- Remaining placement/budget debt: Caddy x2 and ChatOps remain system.slice;
+  ChatOps 1536M must not silently move into agent 600M. Backup still owns its
+  installed 819M cap from platform budget; the profile slices table says 800M.

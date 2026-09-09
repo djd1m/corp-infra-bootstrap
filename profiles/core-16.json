@@ -23,13 +23,13 @@
     {"id": "runner", "steady_mb": 256, "cap_mb": 307, "disk_gb": 20, "adr": "ADR-002"},
     {"id": "ci-slot", "steady_mb": 0, "cap_mb": 1536, "disk_gb": 0, "adr": "ADR-002", "opts": {"concurrent": 1, "memory": "1500m"}},
     {"id": "backup", "steady_mb": 0, "cap_mb": 819, "disk_gb": 55, "adr": "ADR-008"},
-    {"id": "opsagent", "steady_mb": 0, "cap_mb": 614, "disk_gb": 2, "adr": "ADR-013"}
+    {"id": "opsagent", "steady_mb": 0, "cap_mb": 614, "disk_gb": 2, "adr": "ADR-013", "opts": {"interactive_memory_high_mb": 400, "interactive_memory_max_mb": 600, "interactive_concurrent": 1, "chatops_enabled": false}}
   ],
   "slices": {
     "corp-core": { "MemoryLow": "10444M", "MemoryHigh": "infinity", "MemoryMax": "12442M" },
     "corp-ci": { "MemoryLow": "0", "MemoryHigh": "1.2G", "MemoryMax": "1.5G" },
     "corp-backup": { "MemoryLow": "0", "MemoryHigh": "600M", "MemoryMax": "800M" },
-    "corp-agent": { "MemoryLow": "0", "MemoryHigh": "400M", "MemoryMax": "600M" }
+    "corp-agent": { "MemoryLow": "0", "MemoryHigh": "400M", "MemoryMax": "614M" }
   },
   "offsite": {
     "primary": "yandex-ru",

@@ -204,3 +204,27 @@ Proof: the value is read from `providers/<id>.json` and surfaced as
 `judgments.provider_policy.vpn_hub_allowed`. Changing the verdict on whether a
 provider permits a VPN hub is a one-boolean edit; `install-wireguard.sh` in the
 vpn-proxy repository is not touched.
+
+### Agent budget and placement contract
+
+`platform[id=opsagent].cap_mb` equals `slices.corp-agent.MemoryMax` in MiB.
+The split-b pool is 2048 MiB (High 1600); its ChatOps ceiling is 1536 MiB,
+interactive user manager 600 MiB (High 400), one job/session per path.
+These are shared burst ceilings, not a promise of simultaneous maxima.
+Other profiles have a 614 MiB CLI-only pool and disable ChatOps explicitly.
+Security owns the pool, pop-agents owns service/user-manager placement and
+supported launcher admission. Raw SSH shells are outside that guarantee.
+
+After changing allocation, prove static sizing, then apply security memory
+before agent placement. Verify both owners; a declared slice alone proves
+nothing about a running process:
+
+```bash
+./scripts/sizing-check.sh --static --all
+sudo /opt/corp-infra/security/scripts/reconcile-memory.sh --check --quiet
+sudo /opt/corp-infra/pop-agents/scripts/reconcile-agent-memory.sh --check --quiet
+```
+
+The split-b G2 sum is exactly 16896 MiB = 110% of minimum RAM. Do not add
+agent capacity without re-evaluating the complete profile. Publish only after
+live placement, idempotence and offsite scratch-restore proof.

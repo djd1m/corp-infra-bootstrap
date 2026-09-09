@@ -150,3 +150,41 @@ flowchart TB
   application VPS с профилем `two-vps-split-b`.
 - site имеет вариант `external`, не получает vhost/контейнер/marker на этом VPS
   и вернётся в профиль только отдельным изменением после готовности DNS.
+
+## High-level: память агентской нагрузки
+
+```mermaid
+flowchart LR
+    SSH[Оператор через SSH] --> Launcher[corp-agent-session]
+    MM[Mattermost] --> ChatOps[ChatOps]
+    Launcher --> Pool[corp-agent.slice: общий Max 2048 MiB]
+    ChatOps --> Pool
+    Pool --> Policy[Давление памяти: политика slices-v1]
+```
+
+## Low-level: вложенность cgroup на application VPS
+
+```mermaid
+flowchart TB
+    Corp[corp.slice] --> Agent[corp-agent.slice<br/>High 1600 / Max 2048 MiB]
+    Agent --> Chat[corp-chatops.service<br/>Max 1536 MiB]
+    Chat --> CLI[CLI и Mattermost MCP]
+    Agent --> User[Менеджер user@UID.service<br/>High 400 / Max 600 MiB]
+    User --> Scope[corp-agent-session.scope<br/>одна интерактивная сессия]
+    Agent --> Helpers[Inbox и scrub]
+```
+
+## Flow: допуск интерактивной сессии
+
+```mermaid
+flowchart TD
+    Entry[corp-agent-session от opsagent] --> Bus{Доступен пользовательский systemd?}
+    Bus -->|нет| Refuse[Отказ с объяснением]
+    Bus -->|да| Scope[Создать единственную именованную scope]
+    Scope --> Group{Настоящая cgroup внутри агентского пула?}
+    Group -->|нет| Refuse
+    Group -->|да| Run[Записать сессию и запустить CLI]
+```
+
+Это схема поддерживаемого входа. Обычная SSH-оболочка остаётся в login-session
+cgroup. Максимумы дочерних сервисов делят общий пул и могут конкурировать.

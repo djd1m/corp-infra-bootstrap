@@ -181,3 +181,22 @@ flag.
 If an expected output did not match, if the decision table and recon disagree,
 or if a gate failed: stop, report what you ran, what you got, and what you
 expected. Do not try another profile to see whether it passes.
+
+## Agent allocation verification after installation
+
+Do not enable ChatOps on a CLI-only profile or increase caps to bypass a gate.
+Only `two-vps-split-b` currently budgets ChatOps: shared pool 2048 MiB,
+ChatOps ceiling 1536 MiB and interactive manager ceiling 600 MiB.
+Other profiles have a 614 MiB shared pool. Both paths allow one session/job.
+
+```bash
+cd /opt/corp-infra/bootstrap
+./scripts/sizing-check.sh --static --all
+sudo /opt/corp-infra/security/scripts/reconcile-memory.sh --check --quiet
+sudo /opt/corp-infra/pop-agents/scripts/reconcile-agent-memory.sh --check --quiet
+```
+
+Expected: all profiles PASS, then `OK: reconcile-memory.sh` and
+`OK: reconcile-agent-memory.sh`. If any command exits 1 or 2, STOP and report
+its output. An SSH shell alone does not prove placement; use the supported
+`corp-agent-session` entry point documented in pop-agents.

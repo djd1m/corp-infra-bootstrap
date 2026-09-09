@@ -7,7 +7,7 @@
 | `all-in-one-32` | 8 / 32 GB / 500 GB | всё, включая OpenProject | 19.28 GB (60 %) | 28.90 GB (90 %) | нет | OpenProject CE |
 | **`core-16`** (по умолчанию) | 8 / 16 GB / 350 GB | всё, кроме OpenProject; GitLab memory-constrained; observability lean | 11.08 GB (69 %) | 16.40 GB (102.5 %) | да, управляемый | GitLab issues/boards |
 | `two-vps-split-a` | 8 / 16 GB / 350 GB | узел «git»: GitLab + CI | 11.18 GB (70 %) | 16.23 GB (101 %) | минимальный | — |
-| `two-vps-split-b` | 4 / 15 GB / 210 GB | узел «apps»: Mattermost, OpenProject и остальные сервисы без GitLab/CI | 9.03 GB (60 %) | 15.10 GB (101 %) | да, управляемый | OpenProject CE |
+| `two-vps-split-b` | 4 / 15 GB / 210 GB | узел «apps»: Mattermost, OpenProject и остальные сервисы без GitLab/CI | 9.03 GB (60 %) | 16.50 GiB (110 %) | да, управляемый | OpenProject CE |
 
 **steady** — потребление в покое и при типовой нагрузке. **cap** — жёсткий
 лимит (`mem_limit` в compose или `MemoryMax=` в systemd-слайсе), выше которого
@@ -68,7 +68,7 @@ GitLab, CI-джобы и бэкапа физически невозможен. �
 | `corp-core` | Caddy ×2, GitLab, observability, BookStack | — | = Σ cap ядра | защищён, `systemd-oomd` его не трогает |
 | `corp-ci` | gitlab-runner и job-контейнеры | 1.2 GB | 1.5 GB | **первая жертва**, `ManagedOOMMemoryPressure=kill` |
 | `corp-backup` | restic, quiesce-хуки, дампы | 0.6 GB | 0.8 GB | окно 03:00–05:00, после дренажа CI |
-| `corp-agent` | opsagent | 0.4 GB | 0.6 GB | вторая жертва |
+| `corp-agent` | поддерживаемые сессии opsagent и служебные обработчики | 400 MiB | 614 MiB | допустимая цель oomd |
 
 Кому overcommit неприемлем — `two-vps-split` или `all-in-one-32`.
 
@@ -144,3 +144,28 @@ sudo ./scripts/bootstrap.sh --profile core-16 --force-profile
 
 Если `sizing_verdict` = `fail`, флага для продолжения нет. Машина меньше
 профиля — это не мнение, а измерение.
+
+## Бюджет агентов и реальное размещение
+
+В `two-vps-split-b` общий пул `corp-agent.slice` имеет `MemoryHigh=1600M`
+и `MemoryMax=2048M`. ChatOps, его CLI и дочерний Mattermost MCP делят
+индивидуальный предел 1536 MiB. Пользовательский systemd-менеджер opsagent
+имеет High 400 MiB / Max 600 MiB и принимает одну интерактивную сессию через
+`corp-agent-session`. Inbox и scrub также входят в общий пул.
+
+Индивидуальные максимумы 1536 + 600 MiB превышают общий предел 2048 MiB:
+одновременное достижение обоих максимумов не гарантировано. Политика
+`slices-v1` допускает завершение агентской нагрузки при давлении памяти.
+Суммарный cap профиля составляет 16896 MiB: ровно 110% минимальных 15360 MiB.
+Дальнейшее расширение требует пересмотра бюджета.
+
+Остальные три профиля выделяют пул 614 MiB и поддерживают только CLI:
+`chatops_enabled=false`. Включение ChatOps требует явного бюджета профиля.
+Поля `platform[id=opsagent].opts` задают индивидуальные ограничения и
+одновременность; `cap_mb` должен совпадать с `slices.corp-agent.MemoryMax`.
+Security применяет общий пул, pop-agents — размещение и дочерние ограничения.
+
+Обычная SSH-оболочка и произвольные команды от UID opsagent не переводятся
+в этот пул автоматически. Ограниченный вход — `corp-agent-session`; он
+проверяет настоящую cgroup перед запуском CLI. Подробные команды и проверка
+размещения: [pop-agents](../../pop-agents/for-humans/).

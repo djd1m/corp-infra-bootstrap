@@ -98,3 +98,14 @@ bash -n scripts/*.sh lib/common.sh          # syntax
 sudo ./scripts/bootstrap.sh --check         # stage map; operational state is root-readable
 sudo ./scripts/doctor.sh                    # all of the above, aggregated
 ```
+
+
+## Worker release CI boundary
+
+Bootstrap remains the sole canonical library owner. This repository is public;
+private sibling checkouts and read keys must not enter its workflows or logs.
+G-11 validates the public function contract here. The authoritative, required
+G-09 six-copy byte comparison runs in private corp-infra-pop-agents CI against
+pinned worker revisions. Missing checkout credentials or any byte mismatch fail
+that gate. Bootstrap CI alone is never proof that the six-repository release
+is compatible; release acceptance requires that private G-09 result as well.

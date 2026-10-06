@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   shell:
@@ -77,6 +78,7 @@ jobs:
       - name: G-08 gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           GITLEAKS_CONFIG: .gitleaks.toml
 
   json:
@@ -189,7 +191,8 @@ jobs:
           for md in sorted(pathlib.Path(".").rglob("*.md")):
               text = md.read_text(encoding="utf-8")
               refs = set(re.findall(r"\]\(([^)#]+?)\)", text))
-              refs |= set(re.findall(r"`([^`\s]+\.(?:md|sh|json|yml|yaml|env|toml))`", text))
+              code_refs = set(re.findall(r"`([^`\s]+\.(?:md|sh|json|yml|yaml|env|toml))`", text))
+              refs |= {ref for ref in code_refs if not ref.startswith(("~/", ".claude/", "DRP/", "github.com/", "./config/config.yaml"))}
               for ref in refs:
                   if ref.startswith(("http://", "https://", "mailto:", "/")):
                       continue
@@ -208,38 +211,14 @@ jobs:
           PY
 
   lib:
-    name: G-09 / G-11 library contract (authoritative byte-identity)
+    name: G-11 canonical library public contract
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      # bootstrap owns the canonical lib/common.sh and is THE authoritative
-      # byte-identity gate (ADR-012, MAJOR-5). Every sibling is checked out and
-      # compared here on every PR. These checkouts deliberately do NOT set
-      # continue-on-error: if a sibling cannot be fetched, the gate FAILS rather
-      # than skipping, so drift can never merge green through an unavailable
-      # canonical/sibling.
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/corp-infra-security
-          path: .siblings/security
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/corp-infra-vpn-proxy
-          path: .siblings/vpn-proxy
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/corp-infra-backup
-          path: .siblings/backup
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/corp-infra-ent-infra
-          path: .siblings/ent-infra
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/corp-infra-pop-agents
-          path: .siblings/pop-agents
-
+      # Canonical ownership stays here. The required six-repository byte gate
+      # runs in private pop-agents CI, so private source and read credentials
+      # are never placed in this public repository's jobs or logs.
       - name: Every public function in the contract exists
         run: |
           set -Eeuo pipefail
@@ -284,40 +263,6 @@ jobs:
           '
           python3 -m json.tool /tmp/corpus.json > /dev/null
           echo "G-11 OK"
-
-      - name: G-09 canonical lib is byte-identical in all five siblings (authoritative)
-        run: |
-          set -Eeuo pipefail
-          canon=lib/common.sh
-          canonver=lib/VERSION
-          test -s "$canon"    || { echo "FAIL: canonical lib/common.sh is missing"; exit 1; }
-          test -s "$canonver" || { echo "FAIL: canonical lib/VERSION is missing"; exit 1; }
-          rc=0
-          for name in security vpn-proxy backup ent-infra pop-agents; do
-            sib=".siblings/$name/lib/common.sh"
-            sibver=".siblings/$name/lib/VERSION"
-            # The checkout step already fails the job when a sibling is
-            # unavailable; this is the defensive belt on top of that brace.
-            if [ ! -r "$sib" ] || [ ! -r "$sibver" ]; then
-              echo "FAIL: $name has no vendored lib to compare (canonical unavailable => fail, not skip)"
-              rc=1; continue
-            fi
-            if ! cmp -s "$canonver" "$sibver"; then
-              echo "VERSION-DRIFT: $name pins $(cat "$sibver"), canonical is $(cat "$canonver")"
-              rc=1; continue
-            fi
-            if ! cmp -s "$canon" "$sib"; then
-              echo "CONTENT-DRIFT: $name has an edited vendored lib at the same VERSION (INV-BS-3)"
-              diff -u "$canon" "$sib" | head -40 || true
-              rc=1; continue
-            fi
-            echo "ok   $name: byte-identical (lib $(cat "$sibver"))"
-          done
-          if [ "$rc" -ne 0 ]; then
-            echo "G-09 FAIL: this is the single authoritative byte-identity gate; drift must not merge"
-            exit 1
-          fi
-          echo "G-09 OK: canonical lib is byte-identical in every sibling"
 
   checks:
     name: Script self-checks are non-mutating

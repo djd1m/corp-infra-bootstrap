@@ -24,7 +24,7 @@
     "schema_version": { "type": "integer", "const": 1 },
     "service": {
       "type": "string",
-      "enum": ["gitlab", "mattermost", "tracker", "wiki", "site", "observability", "security", "vpn-proxy", "backup", "bootstrap", "pop-agents", "platform"]
+      "enum": ["gitlab", "mattermost", "tracker", "wiki", "site", "observability", "security", "vpn-proxy", "backup", "bootstrap", "pop-agents", "platform", "coding-workspaces"]
     },
     "aggregate_version": { "type": "string", "minLength": 1 },
     "restore_priority": {

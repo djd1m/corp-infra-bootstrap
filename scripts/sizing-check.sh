@@ -128,7 +128,7 @@ check_catalog() {
     local dir="$1"
     local defaults=0 rc=0 f name base
     local -r allowed_services=" gitlab mattermost tracker wiki site observability "
-    local -r allowed_platform=" os-docker wireguard caddy backup opsagent runner ci-slot "
+    local -r allowed_platform=" os-docker wireguard caddy backup opsagent runner ci-slot coding-runtime "
 
     for f in "$dir"/*.json; do
         [ -e "$f" ] || continue

@@ -24,12 +24,15 @@ BS_FROM=""
 BS_FORCE_PROFILE=0
 BS_PROVIDER=""
 BS_DOMAIN=""
+BS_WORKER=0
+BS_WORKER_HOST_ATTESTED=0
 
 usage() {
     cat <<EOF
 Usage: bootstrap.sh [--check] [--yes] [--profile <name>] [--quiet]
                     [--stage <name>] [--from <name>] [--force-profile]
                     [--provider <id>] [--domain <example.com>]
+                    [--worker-dedicated-host]
 
 Applies the five stages in the fixed order:
   ${STAGE_ORDER[*]}
@@ -47,6 +50,8 @@ Applies the five stages in the fixed order:
   --provider <id>   pass a provider override through to recon.sh
   --domain <name>   corporate base domain; persisted in state.json and passed
                     to the proxy and every business-service installer
+  --worker-dedicated-host  attest that the worker pilot uses a dedicated host;
+                    required on its first apply, never implied by --yes
   --quiet           log to file only; stdout is one result line
   --help / --version
 
@@ -81,6 +86,7 @@ ci_extra_arg() {
             ;;
         --from=*)       BS_FROM="${1#*=}"; CI_EXTRA_SHIFT=1 ;;
         --force-profile) BS_FORCE_PROFILE=1; CI_EXTRA_SHIFT=1 ;;
+        --worker-dedicated-host) BS_WORKER_HOST_ATTESTED=1; CI_EXTRA_SHIFT=1 ;;
         --provider)
             [ "$#" -ge 2 ] || die 2 "--provider requires an argument"
             BS_PROVIDER="$2"; CI_EXTRA_SHIFT=2
@@ -115,7 +121,12 @@ stage_repo() {
 stage_entries() {
     case "$1" in
         security)   printf 'harden.sh\n' ;;
-        vpn-proxy)  printf 'install-wireguard.sh\ninstall-proxy.sh\n' ;;
+        vpn-proxy)
+            if [ "$BS_WORKER" = 1 ]; then
+                printf 'install-worker-network.sh\n'
+            else
+                printf 'install-wireguard.sh\ninstall-proxy.sh\n'
+            fi ;;
         backup)     printf 'install-backup.sh\n' ;;
         ent-infra)  ent_infra_entries ;;
         pop-agents) printf 'install-agent.sh\n' ;;
@@ -127,9 +138,13 @@ stage_entries() {
 stage_marker() {
     case "$1" in
         security)   printf 'security.hardened\n' ;;
-        vpn-proxy)  printf 'proxy.ready\n' ;;
+        vpn-proxy)
+            if [ "$BS_WORKER" = 1 ]; then printf 'worker-network.ready\n'
+            else printf 'proxy.ready\n'; fi ;;
         backup)     printf 'backup.ready\n' ;;
-        ent-infra)  printf 'ent-infra.observability.installed\n' ;;
+        ent-infra)
+            if [ "$BS_WORKER" = 1 ]; then printf 'ent-infra.worker-observability.installed\n'
+            else printf 'ent-infra.observability.installed\n'; fi ;;
         pop-agents) printf 'agents.ready\n' ;;
         *) return 1 ;;
     esac
@@ -140,7 +155,11 @@ stage_check_cmd() {
     local stage="$1" repo entry
     repo="$(stage_repo "$stage")" || return 1
     if [ "$stage" = "ent-infra" ]; then
-        printf '%s/%s/scripts/check-all.sh\n' "$CI_ROOT" "$repo"
+        if [ "$BS_WORKER" = 1 ]; then
+            printf '%s/%s/scripts/install-observability.sh\n' "$CI_ROOT" "$repo"
+        else
+            printf '%s/%s/scripts/check-all.sh\n' "$CI_ROOT" "$repo"
+        fi
         return 0
     fi
     entry="$(stage_entries "$stage" | head -n1)"
@@ -177,8 +196,22 @@ for entry in data.get("services", []) or []:
 # --check: the stage map. Reads only.
 # --------------------------------------------------------------------------
 
+select_check_profile() {
+    local recorded="" selected="$CI_PROFILE"
+    recorded="$(state_get profile 2>/dev/null || true)"
+    if [ -n "$selected" ] && [ -n "$recorded" ] && [ "$selected" != "$recorded" ]; then
+        die 2 "--profile '$selected' contradicts state.json profile '$recorded'"
+    fi
+    [ -n "$selected" ] || selected="$recorded"
+    if [ -n "$selected" ]; then
+        profile_load "$selected"
+        if [ "$(profile_field node_role)" = worker ]; then BS_WORKER=1; fi
+    fi
+}
+
 run_check() {
     local rc=0 drift=0 pending=0
+    select_check_profile
 
     printf '\ncorp-infra bootstrap - stage map\n'
     printf '  root      : %s\n' "$CI_ROOT"
@@ -206,7 +239,11 @@ run_check() {
             lrc=3
         else
             lrc=0
-            "$script" --check >/dev/null 2>&1 || lrc=$?
+            if [ "$BS_WORKER" = 1 ]; then
+                "$script" --check --profile "$PROFILE_NAME" >/dev/null 2>&1 || lrc=$?
+            else
+                "$script" --check >/dev/null 2>&1 || lrc=$?
+            fi
             case "$lrc" in
                 0) live_txt="ok" ;;
                 1) live_txt="fail" ;;
@@ -274,7 +311,8 @@ ensure_layout() {
 
 run_recon_if_stale() {
     local latest="$CI_STATE/recon/latest.json"
-    local stale=1
+    local stale=1 requested="$CI_PROFILE"
+    [ -n "$requested" ] || requested="$(state_get profile 2>/dev/null || true)"
     if [ -r "$latest" ]; then
         local mtime now
         mtime="$(stat -c %Y "$latest" 2>/dev/null || printf '0')"
@@ -285,10 +323,19 @@ run_recon_if_stale() {
     fi
     # Recency alone is insufficient: profile budgets may have changed after
     # the measurement. Never reuse a verdict computed from an older profile.
-    if [ -n "$CI_PROFILE" ] && [ -r "$BOOTSTRAP_DIR/profiles/$CI_PROFILE.json" ] \
-       && [ -r "$latest" ] && [ "$BOOTSTRAP_DIR/profiles/$CI_PROFILE.json" -nt "$latest" ]; then
-        log INFO "profile '$CI_PROFILE' is newer than recon data; refreshing sizing"
+    if [ -n "$requested" ] && [ -r "$BOOTSTRAP_DIR/profiles/$requested.json" ] \
+       && [ -r "$latest" ] && [ "$BOOTSTRAP_DIR/profiles/$requested.json" -nt "$latest" ]; then
+        log INFO "profile '$requested' is newer than recon data; refreshing sizing"
         stale=1
+    fi
+    # A fresh verdict for another profile cannot admit this profile.
+    if [ -n "$requested" ] && [ -r "$latest" ]; then
+        local measured_profile=""
+        measured_profile="$(json_read "$latest" judgments.profile_requested 2>/dev/null || true)"
+        if [ "$measured_profile" != "$requested" ]; then
+            log INFO "recon was measured for '$measured_profile', not '$requested'; refreshing sizing"
+            stale=1
+        fi
     fi
     if [ "$stale" -eq 0 ]; then
         log INFO "recon data is fresh (< 24h); reusing $latest"
@@ -296,7 +343,7 @@ run_recon_if_stale() {
     fi
     log INFO "recon data is absent or older than 24h; running recon.sh"
     local args=(--quiet)
-    if [ -n "$CI_PROFILE" ]; then args+=(--profile "$CI_PROFILE"); fi
+    if [ -n "$requested" ]; then args+=(--profile "$requested"); fi
     if [ -n "$BS_PROVIDER" ]; then args+=(--provider "$BS_PROVIDER"); fi
     local rrc=0
     "$SCRIPT_DIR/recon.sh" "${args[@]}" >/dev/null || rrc=$?
@@ -307,7 +354,12 @@ run_recon_if_stale() {
 # Decide the profile and enforce INV-BS-2.
 resolve_profile() {
     local latest="$CI_STATE/recon/latest.json"
-    local name="$CI_PROFILE"
+    local name="$CI_PROFILE" recorded=""
+    recorded="$(state_get profile 2>/dev/null || true)"
+    if [ -n "$name" ] && [ -n "$recorded" ] && [ "$name" != "$recorded" ]; then
+        die 2 "--profile '$name' contradicts immutable state.json profile '$recorded'"
+    fi
+    [ -n "$name" ] || name="$recorded"
     if [ -z "$name" ] && [ -r "$latest" ]; then
         name="$(json_read "$latest" judgments.profile_recommended 2>/dev/null || true)"
     fi
@@ -315,10 +367,23 @@ resolve_profile() {
         die 2 "cannot determine a profile; pass --profile <name>"
     fi
     profile_load "$name"
+    if [ "$(profile_field node_role)" = worker ]; then
+        BS_WORKER=1
+        [ "$CI_PROFILE" = "$name" ] || [ "$recorded" = "$name" ] ||
+            die 2 "ordinary worker pilot requires explicit --profile ordinary-worker-v1"
+        [ "$BS_FORCE_PROFILE" = 0 ] || die 2 "worker pilot refuses --force-profile"
+    elif [ "$BS_WORKER_HOST_ATTESTED" = 1 ]; then
+        die 2 "--worker-dedicated-host applies only to a worker profile"
+    fi
     log INFO "profile '$PROFILE_NAME' selected (min ${PROFILE_MIN_VCPU} vCPU / ${PROFILE_MIN_RAM_MB} MB / ${PROFILE_MIN_DISK_GB} GB)"
 
     local verdict="inconclusive"
     if [ -r "$latest" ]; then
+        if [ "$BS_WORKER" = 1 ]; then
+            local measured_profile=""
+            measured_profile="$(json_read "$latest" judgments.profile_requested 2>/dev/null || true)"
+            [ "$measured_profile" = "$name" ] || die 2 "worker sizing recon is for '$measured_profile', expected '$name'"
+        fi
         verdict="$(json_read "$latest" judgments.sizing_verdict 2>/dev/null || printf 'inconclusive')"
     fi
     case "$verdict" in
@@ -341,6 +406,34 @@ resolve_profile() {
     return 0
 }
 
+worker_admission() {
+    [ "$BS_WORKER" = 1 ] || return 0
+    local recorded_attestation=""
+    recorded_attestation="$(state_get worker_dedicated_host_attested 2>/dev/null || true)"
+    if [ "$BS_WORKER_HOST_ATTESTED" != 1 ] && [ "$recorded_attestation" != true ]; then
+        die 2 "worker pilot requires --worker-dedicated-host before any stage; inspect host ownership and existing workloads first"
+    fi
+    local latest="$CI_STATE/recon/latest.json"
+    [ -r "$latest" ] || die 2 "worker pilot requires measured recon data"
+    # Known corporate server/collector components are incompatible with an
+    # ordinary worker. Recon is only a partial inventory; the operator's
+    # dedicated-host attestation covers other workloads and provider tenancy.
+    local conflict=""
+    conflict="$(python3 - "$latest" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        data = json.load(fh)
+    forbidden = {"gitlab", "caddy-public", "caddy-internal", "prometheus", "grafana", "loki"}
+    print(" ".join(c["id"] for c in data["facts"]["existing_components"]
+                   if c.get("id") in forbidden and c.get("present") is True))
+except (OSError, ValueError, KeyError, TypeError):
+    sys.exit(2)
+PY
+)" || die 2 "worker pilot cannot inspect existing components in recon"
+    [ -z "$conflict" ] || die 1 "worker pilot cannot share a host with existing corporate server components: $conflict"
+}
+
 init_state() {
     if [ -n "$BS_DOMAIN" ]; then
         if [[ ! "$BS_DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
@@ -357,6 +450,9 @@ init_state() {
     state_set profile "$PROFILE_NAME"
     state_set profile_forced "${BS_PROFILE_FORCED:-false}" bool
     state_set node_role "$(profile_field node_role 2>/dev/null || printf 'single')"
+    if [ "$BS_WORKER" = 1 ]; then
+        state_set worker_dedicated_host_attested true bool
+    fi
     if [ -n "$BS_DOMAIN" ]; then
         state_set domain "$BS_DOMAIN"
     fi
@@ -470,7 +566,7 @@ run_stage() {
             die 2 "stage '$stage': entry point $script is missing or not executable"
         fi
         local args=(--yes --profile "$PROFILE_NAME") domain=""
-        if [ "$entry" = "install-proxy.sh" ] || [ "$stage" = "ent-infra" ]; then
+        if [ "$entry" = "install-proxy.sh" ] || { [ "$stage" = "ent-infra" ] && [ "$BS_WORKER" != 1 ]; }; then
             domain="$(state_get domain 2>/dev/null || true)"
             [ -n "$domain" ] || die 2 "stage '$stage' requires the corporate domain; rerun bootstrap with --domain <example.com>"
             args+=(--domain "$domain")
@@ -495,6 +591,7 @@ run_apply() {
     ensure_layout
     run_recon_if_stale
     resolve_profile
+    worker_admission
     init_state
     clone_repos
 
@@ -538,7 +635,11 @@ run_apply() {
             if [ "$in_todo" = "1" ]; then
                 continue
             fi
-            require_stage "$(stage_marker "$prev")" "$(stage_check_cmd "$prev")" --check
+            if [ "$BS_WORKER" = 1 ]; then
+                require_stage "$(stage_marker "$prev")" "$(stage_check_cmd "$prev")" --check --profile "$PROFILE_NAME"
+            else
+                require_stage "$(stage_marker "$prev")" "$(stage_check_cmd "$prev")" --check
+            fi
         done
 
         rc=0
@@ -546,6 +647,12 @@ run_apply() {
         if [ "$rc" -ne 0 ]; then
             log ERROR "aborting: stage '$stage' failed with exit $rc"
             return "$rc"
+        fi
+
+        # In the worker pilot each producer's live check must pass before the
+        # next stage, including when both stages are in this same run.
+        if [ "$BS_WORKER" = 1 ]; then
+            require_stage "$(stage_marker "$stage")" "$(stage_check_cmd "$stage")" --check --profile "$PROFILE_NAME"
         fi
 
         case "$stage" in
@@ -566,7 +673,13 @@ run_apply() {
                     "$CI_ROOT/security/scripts/age-escrow.sh" --check
                 ;;
             vpn-proxy)
-                if "$CI_ROOT/vpn-proxy/scripts/install-wireguard.sh" --check --quiet >/dev/null 2>&1; then
+                if [ "$BS_WORKER" = 1 ]; then
+                    if "$CI_ROOT/vpn-proxy/scripts/install-worker-network.sh" --check --profile "$PROFILE_NAME" --quiet >/dev/null 2>&1; then
+                        log INFO "worker VPN peer is live-verified; network gate is satisfied"
+                    else
+                        die 2 "worker network live check failed after stage completion"
+                    fi
+                elif "$CI_ROOT/vpn-proxy/scripts/install-wireguard.sh" --check --quiet >/dev/null 2>&1; then
                     log INFO "operator WireGuard connectivity was previously proven; STOP gate is satisfied"
                 else
                     stop_gate "switch your session onto the VPN" \

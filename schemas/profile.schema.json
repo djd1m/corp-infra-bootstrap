@@ -33,7 +33,8 @@
       "type": "boolean"
     },
     "description": { "type": "string", "minLength": 1 },
-    "node_role": { "type": "string", "enum": ["single", "git", "apps"] },
+    "node_role": { "type": "string", "enum": ["single", "git", "apps", "worker"] },
+    "deployment_status": { "type": "string", "const": "experimental-pilot" },
     "min_vcpu": { "type": "integer", "minimum": 1 },
     "min_ram_mb": { "type": "integer", "minimum": 1024 },
     "min_disk_gb": { "type": "integer", "minimum": 1 },
@@ -79,7 +80,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "enum": ["os-docker", "wireguard", "caddy", "backup", "opsagent", "runner", "ci-slot"]
+            "enum": ["os-docker", "wireguard", "caddy", "backup", "opsagent", "runner", "ci-slot", "coding-runtime"]
           },
           "steady_mb": { "type": "integer", "minimum": 0 },
           "cap_mb": { "type": "integer", "minimum": 0 },
@@ -98,7 +99,8 @@
         "corp-core": { "$ref": "#/$defs/slice" },
         "corp-ci": { "$ref": "#/$defs/slice" },
         "corp-backup": { "$ref": "#/$defs/backup_slice" },
-        "corp-agent": { "$ref": "#/$defs/slice" }
+        "corp-agent": { "$ref": "#/$defs/slice" },
+        "corp-coding": { "$ref": "#/$defs/slice" }
       }
     },
     "offsite": {
@@ -135,6 +137,70 @@
     {
       "if": { "properties": { "contention_policy": { "type": "string" } }, "required": ["contention_policy"] },
       "then": { "required": ["slices"] }
+    },
+    {
+      "if": { "properties": { "node_role": { "const": "worker" } }, "required": ["node_role"] },
+      "then": {
+        "required": ["deployment_status", "slices"],
+        "properties": {
+          "services": {
+            "minItems": 1, "maxItems": 1,
+            "items": {
+              "properties": {
+                "id": { "const": "observability" },
+                "variant": { "const": "worker" },
+                "opts": { "type": "object", "maxProperties": 0 }
+              },
+              "required": ["opts"]
+            }
+          },
+          "platform": {
+            "minItems": 5, "maxItems": 5,
+            "items": {
+              "properties": {
+                "id": { "enum": ["os-docker", "wireguard", "backup", "opsagent", "coding-runtime"] }
+              },
+              "allOf": [
+                {
+                  "if": { "properties": { "id": { "const": "wireguard" } } },
+                  "then": {
+                    "required": ["opts"],
+                    "properties": { "opts": {
+                      "type": "object", "additionalProperties": false, "required": ["role"],
+                      "properties": { "role": { "const": "peer" } }
+                    } }
+                  }
+                },
+                {
+                  "if": { "properties": { "id": { "const": "coding-runtime" } } },
+                  "then": {
+                    "required": ["opts"],
+                    "properties": { "opts": {
+                      "type": "object", "additionalProperties": false,
+                      "required": ["binding_count", "max_active_jobs_per_binding", "per_binding_memory_high_mb", "per_binding_memory_max_mb"],
+                      "properties": {
+                        "binding_count": { "const": 2 },
+                        "max_active_jobs_per_binding": { "const": 1 },
+                        "per_binding_memory_high_mb": { "const": 6144 },
+                        "per_binding_memory_max_mb": { "const": 8192 }
+                      }
+                    } }
+                  }
+                }
+              ]
+            },
+            "allOf": [
+              { "contains": { "properties": { "id": { "const": "os-docker" } } } },
+              { "contains": { "properties": { "id": { "const": "wireguard" } } } },
+              { "contains": { "properties": { "id": { "const": "backup" } } } },
+              { "contains": { "properties": { "id": { "const": "opsagent" } } } },
+              { "contains": { "properties": { "id": { "const": "coding-runtime" } } } }
+            ]
+          },
+          "slices": { "required": ["corp-coding"] },
+          "vpn": { "properties": { "hub_role": { "const": "external" } } }
+        }
+      }
     }
   ],
   "$defs": {

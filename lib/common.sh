@@ -131,8 +131,8 @@ die() {
 }
 
 # log_init <repo> <script> - open $CI_LOGDIR/<repo>/<script>.log and tee into it.
-# Idempotent. In --check mode it never creates directories (zero mutations):
-# if the log directory is absent, logging stays on stdout only.
+# Idempotent. In --check mode logging stays on stdout only: even opening an
+# existing log for append would change its metadata and violate zero writes.
 log_init() {
     local repo="${1:-$CI_REPO}"
     local script="${2:-$CI_SCRIPT}"
@@ -143,14 +143,13 @@ log_init() {
         return 0
     fi
     _CI_LOG_READY=1
+    if [ "$CI_MODE" = "check" ]; then
+        CI_LOG=""
+        return 0
+    fi
 
     local dir="$CI_LOGDIR/$repo"
     if [ ! -d "$dir" ]; then
-        if [ "$CI_MODE" = "check" ]; then
-            # --check must not create anything, not even a log directory.
-            CI_LOG=""
-            return 0
-        fi
         if ! mkdir -p "$dir" 2>/dev/null; then
             CI_LOG=""
             log WARN "cannot create log directory $dir; logging to stdout only"

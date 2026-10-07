@@ -22,7 +22,7 @@ G1–G4.
 CI пересчитывает их заново — если таблица в документе и JSON разойдутся, CI это
 поймает.
 
-## Четыре профиля
+## Профили
 
 | Файл | `node_role` | vCPU / RAM / Диск | Σ steady | Σ cap | `contention_policy` | Трекер |
 |---|---|---|---|---|---|---|
@@ -30,6 +30,20 @@ CI пересчитывает их заново — если таблица в �
 | `core-16.json` **(default)** | `single` | 8 / 16384 MB / 350 GB | 11345 MB (69 %) | 16793 MB (102.5 %) | `slices-v1` | GitLab issues |
 | `two-vps-split-a.json` | `git` | 8 / 16384 MB / 350 GB | 11448 MB (70 %) | 16619 MB (101 %) | `slices-v1` | — |
 | `two-vps-split-b.json` | `apps` | 4 / 15360 MB / 210 GB | 9246 MB (60 %) | 15462 MB (101 %) | `slices-v1` | OpenProject CE + Mattermost |
+| `ordinary-worker-v1.json` **(experimental pilot)** | `worker` | 8 / 32768 MB / 300 GB | 9093 MB (28 %) | 20838 MB (64 %) | `slices-v1` | Worker exporters + shipper |
+
+`ordinary-worker-v1` is an admission floor for a new dedicated node, not a
+measurement of any existing host and not a production-ready declaration. It
+requires explicit `bootstrap.sh --profile ordinary-worker-v1
+--worker-dedicated-host`, a fresh matching recon verdict, and a live end-to-end
+pilot on the dedicated host. `--force-profile` is refused. The 150 GB
+`coding-runtime` disk entry is a workspace reservation in the sizing sum; the
+actual project roots and free space still require measurement. One job per
+coding binding and two 8192 MB child user units fit inside `corp-coding`'s
+16384 MB hard cap. OpsAgent remains in `corp-agent`. The worker VPN stage is a
+peer with no Caddy, and its observability stage ships to the hub without a
+local collector. Bootstrap stage checks alone do not prove MM inference,
+offsite restore, or fleet readiness.
 
 Ровно один профиль имеет `"default": true`. Это проверяется гейтом.
 
@@ -78,7 +92,8 @@ CI пересчитывает их заново — если таблица в �
 - `services[]` — то, что видит пользователь. `id` из закрытого множества:
   `gitlab`, `mattermost`, `tracker`, `wiki`, `site`, `observability`.
 - `platform[]` — то, что есть всегда. `id` из закрытого множества:
-  `os-docker`, `wireguard`, `caddy`, `backup`, `opsagent`, `runner`, `ci-slot`.
+  `os-docker`, `wireguard`, `caddy`, `backup`, `opsagent`, `runner`, `ci-slot`,
+  `coding-runtime`.
 - `offsite` — цель офсайт-бэкапа. **Конфиг, а не код**: смена цели с B2 на
   Yandex Object Storage или Cloud.ru — это изменение значения `offsite.primary` и
   подстановка соответствующего env-шаблона в репе `backup`. Ни одна строка

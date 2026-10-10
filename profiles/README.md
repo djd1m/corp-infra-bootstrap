@@ -124,3 +124,13 @@ offsite restore, or fleet readiness.
 4. Во всех остальных случаях — `core-16`.
 
 Переопределить рекомендацию: `bootstrap.sh --profile <name>`.
+
+Для экспериментальных workers выбор всегда явный. `ordinary-worker-v1`
+сохраняет исходные32GiB/300GiB floors и два coding bindings6144/8192MiB.
+`ordinary-worker-small-v1` — отдельное имя с измеренными бюджетами aicoding-site:
+минимум8vCPU,11264MiB RAM,95GiB root; bindings2304/3072MiB, общий pool6144MiB.
+Он требует согласованного root-owner входа только по ключу. Нельзя выбирать его
+для admin login другого имени или незаметно изменять existing recorded profile.
+Это не поддержка8GiB: такая машина не проходит admission.16GiB также не является
+автоматическим PASS — recon/G1–G4, render/check consumers и live acceptance
+остаются обязательными. Автоматическая рекомендация worker не выбирает.

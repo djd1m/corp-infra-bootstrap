@@ -345,7 +345,10 @@ derive_judgments() {
         J_PROFILE_RECOMMENDED="two-vps-split-b"
     else
         J_PROFILE_RECOMMENDED="core-16"
+        # Explicit/state-selected profiles are admitted by their own measured gates.
+        if [ -z "$J_PROFILE_REQUESTED" ]; then
         RECON_BLOCKERS+=("no profile fits this host: ${F_MEM_TOTAL} MB RAM and ${F_DISK_ROOT_TOTAL} GB root disk are below the smallest supported profile (two-vps-split-b: 12288 MB / 200 GB)")
+        fi
     fi
 
     local effective="${J_PROFILE_REQUESTED:-$J_PROFILE_RECOMMENDED}"

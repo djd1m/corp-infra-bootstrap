@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "name": "ordinary-worker-small-v1",
+  "default": false,
+  "description": "Experimental small worker using the measured aicoding-site budgets (8 vCPU, min11264MiB RAM/95GiB root). Requires explicit root-owner key-only access policy. Admission and live acceptance remain mandatory; no8GiB support or coding-concurrency guarantee.",
+  "node_role": "worker",
+  "deployment_status": "experimental-pilot",
+  "min_vcpu": 8,
+  "min_ram_mb": 11264,
+  "min_disk_gb": 95,
+  "gates": {
+    "g1_steady_ratio": 0.75,
+    "g2_cap_ratio": 1.1,
+    "g4_disk_ratio": 1.15,
+    "g5_headroom_mb": 512
+  },
+  "contention_policy": "slices-v1",
+  "services": [
+    {
+      "id": "observability",
+      "variant": "worker",
+      "steady_mb": 256,
+      "cap_mb": 512,
+      "disk_gb": 5,
+      "adr": "ADR-011",
+      "opts": {}
+    }
+  ],
+  "platform": [
+    {
+      "id": "os-docker",
+      "steady_mb": 614,
+      "cap_mb": 1024,
+      "disk_gb": 25,
+      "opts": {
+        "owner_access": {
+          "admin_login": "root",
+          "sshd": {
+            "permitrootlogin": "prohibit-password",
+            "passwordauthentication": "no",
+            "authenticationmethods": "publickey",
+            "pubkeyauthentication": "yes"
+          }
+        }
+      }
+    },
+    {
+      "id": "wireguard",
+      "steady_mb": 31,
+      "cap_mb": 51,
+      "disk_gb": 0,
+      "adr": "ADR-005",
+      "opts": {
+        "role": "peer"
+      }
+    },
+    {
+      "id": "backup",
+      "steady_mb": 0,
+      "cap_mb": 819,
+      "disk_gb": 20,
+      "adr": "ADR-008"
+    },
+    {
+      "id": "opsagent",
+      "steady_mb": 0,
+      "cap_mb": 2048,
+      "disk_gb": 2,
+      "adr": "ADR-013",
+      "opts": {
+        "interactive_memory_high_mb": 400,
+        "interactive_memory_max_mb": 600,
+        "interactive_concurrent": 1,
+        "chatops_enabled": true,
+        "chatops_memory_max_mb": 1536,
+        "chatops_concurrent": 1
+      }
+    },
+    {
+      "id": "coding-runtime",
+      "steady_mb": 3072,
+      "cap_mb": 6144,
+      "disk_gb": 25,
+      "opts": {
+        "binding_count": 2,
+        "max_active_jobs_per_binding": 1,
+        "per_binding_memory_high_mb": 2304,
+        "per_binding_memory_max_mb": 3072
+      }
+    }
+  ],
+  "slices": {
+    "corp-core": {
+      "MemoryLow": "1024M",
+      "MemoryHigh": "infinity",
+      "MemoryMax": "2048M"
+    },
+    "corp-ci": {
+      "MemoryLow": "0",
+      "MemoryHigh": "384M",
+      "MemoryMax": "512M"
+    },
+    "corp-backup": {
+      "MemoryLow": "0",
+      "MemoryHigh": "600M"
+    },
+    "corp-agent": {
+      "MemoryLow": "0",
+      "MemoryHigh": "1600M",
+      "MemoryMax": "2048M"
+    },
+    "corp-coding": {
+      "MemoryLow": "0",
+      "MemoryHigh": "4608M",
+      "MemoryMax": "6144M"
+    }
+  },
+  "offsite": {
+    "primary": "yandex-ru",
+    "alternatives": [
+      "cloudru"
+    ],
+    "residency": "RU",
+    "storage_class": "hot",
+    "retain_logs_offsite": false
+  },
+  "vpn": {
+    "hub_role": "external",
+    "provider_policy": "generic"
+  }
+}

@@ -373,7 +373,7 @@ resolve_profile() {
     if [ "$(profile_field node_role)" = worker ]; then
         BS_WORKER=1
         [ "$CI_PROFILE" = "$name" ] || [ "$recorded" = "$name" ] ||
-            die 2 "ordinary worker pilot requires explicit --profile ordinary-worker-v1"
+            die 2 "ordinary worker pilot requires an explicitly selected worker --profile"
         [ "$BS_FORCE_PROFILE" = 0 ] || die 2 "worker pilot refuses --force-profile"
     elif [ "$BS_WORKER_HOST_ATTESTED" = 1 ]; then
         die 2 "--worker-dedicated-host applies only to a worker profile"

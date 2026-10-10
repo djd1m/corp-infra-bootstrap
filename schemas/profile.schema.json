@@ -162,6 +162,28 @@
               },
               "allOf": [
                 {
+                  "if": { "properties": { "id": { "const": "os-docker" } } },
+                  "then": { "properties": { "opts": {
+                    "properties": { "owner_access": {
+                      "type": "object", "additionalProperties": false,
+                      "required": ["admin_login", "sshd"],
+                      "properties": {
+                        "admin_login": { "const": "root" },
+                        "sshd": {
+                          "type": "object", "additionalProperties": false,
+                          "required": ["permitrootlogin", "passwordauthentication", "authenticationmethods", "pubkeyauthentication"],
+                          "properties": {
+                            "permitrootlogin": { "const": "prohibit-password" },
+                            "passwordauthentication": { "const": "no" },
+                            "authenticationmethods": { "const": "publickey" },
+                            "pubkeyauthentication": { "const": "yes" }
+                          }
+                        }
+                      }
+                    } }
+                  } } }
+                },
+                {
                   "if": { "properties": { "id": { "const": "wireguard" } } },
                   "then": {
                     "required": ["opts"],
@@ -178,11 +200,15 @@
                     "properties": { "opts": {
                       "type": "object", "additionalProperties": false,
                       "required": ["binding_count", "max_active_jobs_per_binding", "per_binding_memory_high_mb", "per_binding_memory_max_mb"],
+                      "oneOf": [
+                        { "properties": { "per_binding_memory_high_mb": { "const": 2304 }, "per_binding_memory_max_mb": { "const": 3072 } } },
+                        { "properties": { "per_binding_memory_high_mb": { "const": 6144 }, "per_binding_memory_max_mb": { "const": 8192 } } }
+                      ],
                       "properties": {
                         "binding_count": { "const": 2 },
                         "max_active_jobs_per_binding": { "const": 1 },
-                        "per_binding_memory_high_mb": { "const": 6144 },
-                        "per_binding_memory_max_mb": { "const": 8192 }
+                        "per_binding_memory_high_mb": { "type": "integer", "enum": [2304, 6144] },
+                        "per_binding_memory_max_mb": { "type": "integer", "enum": [3072, 8192] }
                       }
                     } }
                   }

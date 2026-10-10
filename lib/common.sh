@@ -354,6 +354,47 @@ require_cmd() {
     return 0
 }
 
+# Private timing helpers: stdout-only, no temporary files or child output.
+# /proc/uptime is monotonic on the supported Linux hosts (10-ms resolution).
+_ci_timing_now_ms() {
+    local uptime rest whole fraction
+    if IFS=' ' read -r uptime rest < /proc/uptime 2>/dev/null \
+        && [[ "$uptime" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        whole="${uptime%%.*}"
+        fraction="${uptime#*.}000"
+        printf '%s\n' "$(( 10#$whole * 1000 + 10#${fraction:0:3} ))"
+    else
+        printf '%s\n' "$(( SECONDS * 1000 ))"
+    fi
+}
+
+_ci_exit_class() {
+    case "${1:-2}" in
+        0) printf 'ok' ;;
+        1) printf 'condition_failed' ;;
+        2) printf 'inconclusive' ;;
+        124) printf 'timeout' ;;
+        126|127) printf 'execution_error' ;;
+        *) if [ "$1" -gt 128 ] && [ "$1" -le 192 ]; then
+               printf 'signal_exit'
+           else
+               printf 'unexpected_exit'
+           fi ;;
+    esac
+}
+
+# Identifiers are bounded names, never command arguments or captured output.
+_ci_timing_log() {
+    local event="$1" operation="$2" identity="$3" started="$4" rc="${5:-0}"
+    local elapsed=0
+    [[ "$identity" =~ ^[A-Za-z0-9_.-]{1,128}$ ]] || identity=invalid_identifier
+    if [ "$event" = end ]; then
+        elapsed=$(( $(_ci_timing_now_ms) - started ))
+        [ "$elapsed" -ge 0 ] || elapsed=0
+    fi
+    log INFO "timing event=$event operation=$operation identity=$identity elapsed_ms=$elapsed exit_code=$rc classification=$(_ci_exit_class "$rc")"
+}
+
 # require_stage <stage> <check_cmd...> - INV-BS-1 / INV-GLOBAL-2.
 # A marker is a claim, never a proof: the producer's live --check must also pass.
 require_stage() {
@@ -362,15 +403,24 @@ require_stage() {
     if [ "$#" -eq 0 ]; then
         die 2 "require_stage: live check command required for stage '$stage'"
     fi
-    local rc=0
+    local rc=0 started producer
+    producer="${1##*/}"
+    [[ "$producer" =~ ^[A-Za-z0-9_.-]{1,128}$ ]] || producer=invalid_identifier
+    started="$(_ci_timing_now_ms)"
+    _ci_timing_log start prerequisite "$stage" "$started"
     state_check "$stage" || rc=$?
     case "$rc" in
         0) ;;
-        1) die 2 "stage '$stage' marker reports failed" ;;
-        *) die 2 "stage '$stage' marker missing, malformed or for another host" ;;
+        1) _ci_timing_log end marker_failed "$stage" "$started" "$rc"
+           die 2 "stage prerequisite marker_failed: producer=$producer" ;;
+        *) _ci_timing_log end marker_inconclusive "$stage" "$started" "$rc"
+           die 2 "stage prerequisite marker_inconclusive: producer=$producer" ;;
     esac
-    if ! "$@" >/dev/null 2>&1; then
-        die 2 "stage '$stage' marker is ok but live check failed: $*"
+    rc=0
+    "$@" >/dev/null 2>&1 || rc=$?
+    _ci_timing_log end prerequisite "$stage" "$started" "$rc"
+    if [ "$rc" -ne 0 ]; then
+        die 2 "stage prerequisite live_check_failed: producer=$producer child_exit=$rc classification=$(_ci_exit_class "$rc"); rerun that producer's documented --check for protected diagnostics"
     fi
     log INFO "stage '$stage' confirmed: marker ok and live check ok"
     return 0

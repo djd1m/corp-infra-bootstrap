@@ -5,7 +5,7 @@
 # byte-identical vendored copy plus lib/VERSION (gate G-09). Never edit a
 # vendored copy: change this file, bump lib/VERSION, run scripts/sync-lib.sh.
 #
-# Public API: 35 functions, grouped as in plans/00-implementation-plan.md §3.1.
+# Public API: 36 functions, grouped as in plans/00-implementation-plan.md §3.1.
 #   group 1 prologue/logging : log_init log warn die on_err trap_init
 #   group 2 cli/modes        : parse_args confirm
 #   group 3 preconditions    : require_root require_cmd require_stage retry
@@ -17,6 +17,7 @@
 #   group 6 orchestr. state  : state_get state_set state_mark state_check
 #   group 7 profiles/sizing  : profile_load profile_field profile_service_field
 #                              headroom_check
+#   group 8 node config      : node_config_path
 # Everything prefixed with _ci_ is private and is not a contract.
 #
 # Sourcing this file MUST NOT do anything except set variable defaults.
@@ -1209,4 +1210,36 @@ headroom_check() {
     fi
     log ERROR "headroom FAIL for '$svc': MemAvailable ${avail} MB < required ${need} MB (steady ${steady} + headroom ${headroom})"
     return 1
+}
+
+# node_config_path <repository> <relative config path> <legacy absolute path>.
+# Absence opts into the original layout; a present but invalid external layout
+# never falls back to files inside a release checkout. No mutation on resolution.
+node_config_path() {
+    local repo="${1:?repository required}" relative="${2:?relative path required}"
+    local legacy="${3:?legacy absolute path required}" helper
+    case "$repo" in bootstrap|security|vpn-proxy|backup|ent-infra|pop-agents) ;; *) return 2 ;; esac
+    case "$relative" in .sops.yaml|secrets|secrets/*) ;; *) return 2 ;; esac
+    [[ "$relative" != *..* && "$legacy" = /* ]] || return 2
+    if [ ! -e /etc/corp-infra/node-config ] && [ ! -L /etc/corp-infra/node-config ]; then
+        printf '%s\n' "$legacy"
+        return 0
+    fi
+    helper="$CI_ROOT/bootstrap/scripts/node-config.py"
+    /usr/bin/python3 -I -B - "$helper" <<'PY_NODE_HELPER' || return 2
+import os, pathlib, stat, sys
+path = pathlib.Path(sys.argv[1])
+try:
+    for part in (path, *path.parents):
+        info = part.lstat()
+        if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
+            raise ValueError()
+    info = path.stat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise ValueError()
+except (OSError, ValueError):
+    sys.stderr.write('node_config_helper_untrusted\n')
+    sys.exit(2)
+PY_NODE_HELPER
+    /usr/bin/python3 -I -B "$helper" path --repo "$repo" --relative "$relative" --legacy "$legacy"
 }

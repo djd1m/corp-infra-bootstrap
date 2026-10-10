@@ -222,7 +222,7 @@ run_check() {
     printf '  %-12s %-10s %-12s %s\n' "STAGE" "MARKER" "LIVE CHECK" "VERDICT"
     printf '  %s\n' "-------------------------------------------------------------------"
 
-    local stage marker mrc script lrc marker_txt live_txt verdict
+    local stage marker mrc script lrc marker_txt live_txt verdict check_started
     for stage in "${STAGE_ORDER[@]}"; do
         marker="$(stage_marker "$stage")"
         mrc=0
@@ -234,6 +234,8 @@ run_check() {
         esac
 
         script="$(stage_check_cmd "$stage")"
+        check_started="$(_ci_timing_now_ms)"
+        _ci_timing_log start stage_check "$stage" "$check_started"
         if [ ! -x "$script" ]; then
             live_txt="n/a"
             lrc=3
@@ -250,6 +252,7 @@ run_check() {
                 *) live_txt="inconclusive" ;;
             esac
         fi
+        _ci_timing_log end stage_check "$stage" "$check_started" "$lrc"
 
         if [ "$marker_txt" = "absent" ] && [ "$lrc" -eq 3 ]; then
             verdict="pending"
@@ -370,7 +373,7 @@ resolve_profile() {
     if [ "$(profile_field node_role)" = worker ]; then
         BS_WORKER=1
         [ "$CI_PROFILE" = "$name" ] || [ "$recorded" = "$name" ] ||
-            die 2 "ordinary worker pilot requires explicit --profile ordinary-worker-v1"
+            die 2 "ordinary worker pilot requires an explicitly selected worker --profile"
         [ "$BS_FORCE_PROFILE" = 0 ] || die 2 "worker pilot refuses --force-profile"
     elif [ "$BS_WORKER_HOST_ATTESTED" = 1 ]; then
         die 2 "--worker-dedicated-host applies only to a worker profile"
@@ -542,7 +545,7 @@ stop_gate() {
 
 run_stage() {
     local stage="$1"
-    local repo dir entry script rc=0
+    local repo dir entry script rc=0 stage_started entry_started
     repo="$(stage_repo "$stage")"
     dir="$CI_ROOT/$repo"
 
@@ -552,6 +555,8 @@ run_stage() {
 
     state_set current_stage "$stage"
     log INFO "=== stage $stage ==="
+    stage_started="$(_ci_timing_now_ms)"
+    _ci_timing_log start stage "$stage" "$stage_started"
 
     local entries=()
     if [ "$stage" = "ent-infra" ]; then
@@ -572,16 +577,21 @@ run_stage() {
             args+=(--domain "$domain")
         fi
         log INFO "running $script ${args[*]}"
+        entry_started="$(_ci_timing_now_ms)"
+        _ci_timing_log start stage_entry "$entry" "$entry_started"
         rc=0
         "$script" "${args[@]}" || rc=$?
+        _ci_timing_log end stage_entry "$entry" "$entry_started" "$rc"
         if [ "$rc" -ne 0 ]; then
             state_set "stages.$stage" failed
+            _ci_timing_log end stage "$stage" "$stage_started" "$rc"
             log ERROR "stage '$stage': $entry exited $rc"
             return "$rc"
         fi
     done
 
     state_set "stages.$stage" ok
+    _ci_timing_log end stage "$stage" "$stage_started"
     log INFO "stage '$stage' complete"
     return 0
 }

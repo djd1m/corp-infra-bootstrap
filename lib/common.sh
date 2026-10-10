@@ -5,7 +5,7 @@
 # byte-identical vendored copy plus lib/VERSION (gate G-09). Never edit a
 # vendored copy: change this file, bump lib/VERSION, run scripts/sync-lib.sh.
 #
-# Public API: 35 functions, grouped as in plans/00-implementation-plan.md §3.1.
+# Public API: 36 functions, grouped as in plans/00-implementation-plan.md §3.1.
 #   group 1 prologue/logging : log_init log warn die on_err trap_init
 #   group 2 cli/modes        : parse_args confirm
 #   group 3 preconditions    : require_root require_cmd require_stage retry
@@ -17,6 +17,7 @@
 #   group 6 orchestr. state  : state_get state_set state_mark state_check
 #   group 7 profiles/sizing  : profile_load profile_field profile_service_field
 #                              headroom_check
+#   group 8 node config      : node_config_path
 # Everything prefixed with _ci_ is private and is not a contract.
 #
 # Sourcing this file MUST NOT do anything except set variable defaults.
@@ -354,6 +355,47 @@ require_cmd() {
     return 0
 }
 
+# Private timing helpers: stdout-only, no temporary files or child output.
+# /proc/uptime is monotonic on the supported Linux hosts (10-ms resolution).
+_ci_timing_now_ms() {
+    local uptime rest whole fraction
+    if IFS=' ' read -r uptime rest < /proc/uptime 2>/dev/null \
+        && [[ "$uptime" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        whole="${uptime%%.*}"
+        fraction="${uptime#*.}000"
+        printf '%s\n' "$(( 10#$whole * 1000 + 10#${fraction:0:3} ))"
+    else
+        printf '%s\n' "$(( SECONDS * 1000 ))"
+    fi
+}
+
+_ci_exit_class() {
+    case "${1:-2}" in
+        0) printf 'ok' ;;
+        1) printf 'condition_failed' ;;
+        2) printf 'inconclusive' ;;
+        124) printf 'timeout' ;;
+        126|127) printf 'execution_error' ;;
+        *) if [ "$1" -gt 128 ] && [ "$1" -le 192 ]; then
+               printf 'signal_exit'
+           else
+               printf 'unexpected_exit'
+           fi ;;
+    esac
+}
+
+# Identifiers are bounded names, never command arguments or captured output.
+_ci_timing_log() {
+    local event="$1" operation="$2" identity="$3" started="$4" rc="${5:-0}"
+    local elapsed=0
+    [[ "$identity" =~ ^[A-Za-z0-9_.-]{1,128}$ ]] || identity=invalid_identifier
+    if [ "$event" = end ]; then
+        elapsed=$(( $(_ci_timing_now_ms) - started ))
+        [ "$elapsed" -ge 0 ] || elapsed=0
+    fi
+    log INFO "timing event=$event operation=$operation identity=$identity elapsed_ms=$elapsed exit_code=$rc classification=$(_ci_exit_class "$rc")"
+}
+
 # require_stage <stage> <check_cmd...> - INV-BS-1 / INV-GLOBAL-2.
 # A marker is a claim, never a proof: the producer's live --check must also pass.
 require_stage() {
@@ -362,15 +404,24 @@ require_stage() {
     if [ "$#" -eq 0 ]; then
         die 2 "require_stage: live check command required for stage '$stage'"
     fi
-    local rc=0
+    local rc=0 started producer
+    producer="${1##*/}"
+    [[ "$producer" =~ ^[A-Za-z0-9_.-]{1,128}$ ]] || producer=invalid_identifier
+    started="$(_ci_timing_now_ms)"
+    _ci_timing_log start prerequisite "$stage" "$started"
     state_check "$stage" || rc=$?
     case "$rc" in
         0) ;;
-        1) die 2 "stage '$stage' marker reports failed" ;;
-        *) die 2 "stage '$stage' marker missing, malformed or for another host" ;;
+        1) _ci_timing_log end marker_failed "$stage" "$started" "$rc"
+           die 2 "stage prerequisite marker_failed: producer=$producer" ;;
+        *) _ci_timing_log end marker_inconclusive "$stage" "$started" "$rc"
+           die 2 "stage prerequisite marker_inconclusive: producer=$producer" ;;
     esac
-    if ! "$@" >/dev/null 2>&1; then
-        die 2 "stage '$stage' marker is ok but live check failed: $*"
+    rc=0
+    "$@" >/dev/null 2>&1 || rc=$?
+    _ci_timing_log end prerequisite "$stage" "$started" "$rc"
+    if [ "$rc" -ne 0 ]; then
+        die 2 "stage prerequisite live_check_failed: producer=$producer child_exit=$rc classification=$(_ci_exit_class "$rc"); rerun that producer's documented --check for protected diagnostics"
     fi
     log INFO "stage '$stage' confirmed: marker ok and live check ok"
     return 0
@@ -1159,4 +1210,36 @@ headroom_check() {
     fi
     log ERROR "headroom FAIL for '$svc': MemAvailable ${avail} MB < required ${need} MB (steady ${steady} + headroom ${headroom})"
     return 1
+}
+
+# node_config_path <repository> <relative config path> <legacy absolute path>.
+# Absence opts into the original layout; a present but invalid external layout
+# never falls back to files inside a release checkout. No mutation on resolution.
+node_config_path() {
+    local repo="${1:?repository required}" relative="${2:?relative path required}"
+    local legacy="${3:?legacy absolute path required}" helper
+    case "$repo" in bootstrap|security|vpn-proxy|backup|ent-infra|pop-agents) ;; *) return 2 ;; esac
+    case "$relative" in .sops.yaml|secrets|secrets/*) ;; *) return 2 ;; esac
+    [[ "$relative" != *..* && "$legacy" = /* ]] || return 2
+    if [ ! -e /etc/corp-infra/node-config ] && [ ! -L /etc/corp-infra/node-config ]; then
+        printf '%s\n' "$legacy"
+        return 0
+    fi
+    helper="$CI_ROOT/bootstrap/scripts/node-config.py"
+    /usr/bin/python3 -I -B - "$helper" <<'PY_NODE_HELPER' || return 2
+import os, pathlib, stat, sys
+path = pathlib.Path(sys.argv[1])
+try:
+    for part in (path, *path.parents):
+        info = part.lstat()
+        if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
+            raise ValueError()
+    info = path.stat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise ValueError()
+except (OSError, ValueError):
+    sys.stderr.write('node_config_helper_untrusted\n')
+    sys.exit(2)
+PY_NODE_HELPER
+    /usr/bin/python3 -I -B "$helper" path --repo "$repo" --relative "$relative" --legacy "$legacy"
 }

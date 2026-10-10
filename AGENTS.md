@@ -24,12 +24,13 @@ negotiable.
 
 | Path | What lives here |
 |---|---|
-| `lib/common.sh` | The canonical shell library. 35 public functions. Vendored byte-identical into the other five repos. |
+| `lib/common.sh` | The canonical shell library. 36 public functions. Vendored byte-identical into the other five repos. |
 | `lib/VERSION` | SemVer of the library. Equal across all six repos or gate G-09 fails. |
 | `scripts/recon.sh` | The only source of environment facts. Emits versioned JSON. |
 | `scripts/sizing-check.sh` | Gates G1–G4, static (profiles only) or against recon facts. |
 | `scripts/bootstrap.sh` | The single entry point. Five-stage state machine. |
 | `scripts/ensure-docker.sh` | The only decision about installing Docker Engine. |
+| `scripts/node-config.py` | Protected external candidate worker identity, public policy and encrypted configuration paths. |
 | `scripts/state.sh` | Read-only view of `state.json` and the markers. |
 | `scripts/sync-lib.sh` | Distributes the canonical library. |
 | `scripts/doctor.sh` | Runs every `--check` and aggregates the result. |

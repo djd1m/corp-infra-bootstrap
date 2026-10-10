@@ -1,0 +1,43 @@
+# corp-infra secrets policy (ADR-007 section 5, 04_domain_model section 5.4).
+#
+# WHAT IS IN THIS FILE
+# Only PUBLIC age recipients. A line starting with AGE-SECRET-KEY- in here is a
+# contract violation, not a typo - the private key lives at
+# /root/.config/sops/age/keys.txt (0600) on the host and in escrow, and nowhere
+# else (INV-SEC-4).
+#
+# THE VALUES BELOW ARE PLACEHOLDERS. They are substituted on the VPS by
+# scripts/harden.sh (which generates the prod key) and scripts/secrets-init.sh
+# (which adds and removes the others). The committed form of this file is
+# deliberately not usable for encryption, so a clone of this repository can
+# never decrypt anything.
+#
+# THREE ROLES ARE MANDATORY (04_domain_model section 5.4):
+#   prod         the key on the VPS; decrypts everything at deploy time
+#   ci           the GitLab Runner key; decrypts only what CI needs
+#   break-glass  the escrowed key held by a second person; the only way back
+#                in if prod is lost, which is why it is on every rule
+#
+# The comment lines below are not decoration: scripts/secrets-init.sh and
+# scripts/age-escrow.sh parse them to answer "which recipient has which role".
+# A recipient in creation_rules without a role line here fails
+# `secrets-init.sh --check`.
+#
+# corp-infra-recipient: prod <prod-recipient>
+# corp-infra-recipient: ci <ci-recipient>
+# corp-infra-recipient: break-glass <break-glass-recipient>
+
+creation_rules:
+  # Anything under a secrets/ directory in any of the six repositories. CI can
+  # read these: runner jobs need registry and deploy credentials.
+  - path_regex: '(^|/)secrets/.*\.enc\.(env|yaml|json)$'
+    age: >-
+      <prod-recipient>,<ci-recipient>,<break-glass-recipient>
+
+  # Everything else that is encrypted anywhere in the tree - WireGuard peer
+  # configs, backup repository passwords, service .env files. CI is NOT a
+  # recipient here: a compromised runner must not be able to read the backup
+  # repository password or a VPN private key.
+  - path_regex: '.*\.enc\.(env|yaml|json)$'
+    age: >-
+      <prod-recipient>,<break-glass-recipient>

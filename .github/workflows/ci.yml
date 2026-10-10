@@ -17,6 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Stage timing, read-only checks and worker orchestration regressions
+        run: python3 -B -m unittest discover -s tests -v
+
       - name: G-02 bash -n on every script
         run: |
           set -Eeuo pipefail
@@ -228,7 +231,7 @@ jobs:
             source lib/common.sh
             missing=""
             for f in log_init log warn die on_err trap_init parse_args confirm \
-                     require_root require_cmd require_stage retry \
+                     require_root require_cmd require_stage retry node_config_path \
                      json_escape json_kv json_arr json_read \
                      detect_os detect_virt detect_pkg_mgr cpu_count \
                      ram_total_mb ram_avail_mb disk_total_gb disk_free_gb \

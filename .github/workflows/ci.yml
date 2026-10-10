@@ -17,6 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Stage timing, read-only checks and worker orchestration regressions
+        run: python3 -B -m unittest discover -s tests -v
+
       - name: G-02 bash -n on every script
         run: |
           set -Eeuo pipefail
